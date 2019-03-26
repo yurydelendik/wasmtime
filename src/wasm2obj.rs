@@ -34,6 +34,7 @@ extern crate serde_derive;
 
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
+use cranelift_debug::{emit_debugsections, read_debuginfo};
 use cranelift_native;
 use docopt::Docopt;
 use faerie::Artifact;
@@ -48,7 +49,6 @@ use std::process;
 use std::str;
 use std::str::FromStr;
 use target_lexicon::Triple;
-use wasmtime_debug::{emit_debugsections, read_debuginfo};
 use wasmtime_environ::{cranelift, ModuleEnvironment, Tunables};
 use wasmtime_obj::emit_module;
 

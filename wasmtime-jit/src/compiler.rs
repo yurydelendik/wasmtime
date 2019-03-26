@@ -8,13 +8,13 @@ use cranelift_codegen::ir::InstBuilder;
 use cranelift_codegen::isa::{TargetFrontendConfig, TargetIsa};
 use cranelift_codegen::Context;
 use cranelift_codegen::{binemit, ir};
+use cranelift_debug::{emit_debugsections_image, DebugInfoData};
 use cranelift_entity::PrimaryMap;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_wasm::DefinedFuncIndex;
 use std::boxed::Box;
 use std::string::String;
 use std::vec::Vec;
-use wasmtime_debug::{emit_debugsections_image, DebugInfoData};
 use wasmtime_environ::cranelift;
 use wasmtime_environ::{
     Compilation, CompileError, FunctionBodyData, Module, Relocations, Tunables,

@@ -1,9 +1,6 @@
 //! Support for compiling with Cranelift.
 
-use crate::compilation::{
-    AddressTransforms, Compilation, CompileError, FunctionAddressTransform,
-    InstructionAddressTransform, Relocation, RelocationTarget, Relocations,
-};
+use crate::compilation::{Compilation, CompileError, Relocation, RelocationTarget, Relocations};
 use crate::func_environ::{
     get_func_name, get_imported_memory32_grow_name, get_imported_memory32_size_name,
     get_memory32_grow_name, get_memory32_size_name, FuncEnvironment,
@@ -15,6 +12,7 @@ use cranelift_codegen::ir;
 use cranelift_codegen::ir::ExternalName;
 use cranelift_codegen::isa;
 use cranelift_codegen::Context;
+use cranelift_debug::{FunctionAddressMap, InstructionAddressMap, ModuleAddressMap};
 use cranelift_entity::PrimaryMap;
 use cranelift_wasm::{DefinedFuncIndex, FuncIndex, FuncTranslator};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
@@ -85,10 +83,7 @@ impl RelocSink {
     }
 }
 
-fn get_address_transform(
-    context: &Context,
-    isa: &isa::TargetIsa,
-) -> Vec<InstructionAddressTransform> {
+fn get_address_transform(context: &Context, isa: &isa::TargetIsa) -> Vec<InstructionAddressMap> {
     let mut result = Vec::new();
 
     let func = &context.func;
@@ -99,7 +94,7 @@ fn get_address_transform(
     for ebb in ebbs {
         for (offset, inst, size) in func.inst_offsets(ebb, &encinfo) {
             let srcloc = func.srclocs[inst];
-            result.push(InstructionAddressTransform {
+            result.push(InstructionAddressMap {
                 srcloc,
                 code_offset: offset as usize,
                 code_len: size as usize,
@@ -116,7 +111,7 @@ pub fn compile_module<'data, 'module>(
     function_body_inputs: PrimaryMap<DefinedFuncIndex, FunctionBodyData<'data>>,
     isa: &dyn isa::TargetIsa,
     generate_debug_info: bool,
-) -> Result<(Compilation, Relocations, AddressTransforms), CompileError> {
+) -> Result<(Compilation, Relocations, ModuleAddressMap), CompileError> {
     let mut functions = PrimaryMap::with_capacity(function_body_inputs.len());
     let mut relocations = PrimaryMap::with_capacity(function_body_inputs.len());
     let mut address_transforms = PrimaryMap::with_capacity(function_body_inputs.len());
@@ -151,8 +146,10 @@ pub fn compile_module<'data, 'module>(
             let address_transform = if generate_debug_info {
                 let body_len = code_buf.len();
                 let at = get_address_transform(&context, isa);
-                Some(FunctionAddressTransform {
-                    locations: at,
+                Some(FunctionAddressMap {
+                    instructions: at,
+                    start_srcloc: ir::SourceLoc::default(),
+                    end_srcloc: ir::SourceLoc::default(),
                     body_offset: 0,
                     body_len,
                 })

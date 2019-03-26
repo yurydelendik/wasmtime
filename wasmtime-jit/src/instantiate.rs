@@ -8,6 +8,7 @@ use crate::compiler::Compiler;
 use crate::link::link_module;
 use crate::resolver::Resolver;
 use core::cell::RefCell;
+use cranelift_debug::read_debuginfo;
 use cranelift_entity::{BoxedSlice, PrimaryMap};
 use cranelift_wasm::{DefinedFuncIndex, SignatureIndex};
 use std::boxed::Box;
@@ -15,7 +16,6 @@ use std::io::Write;
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
-use wasmtime_debug::read_debuginfo;
 use wasmtime_environ::{
     CompileError, DataInitializer, DataInitializerLocation, Module, ModuleEnvironment,
 };
