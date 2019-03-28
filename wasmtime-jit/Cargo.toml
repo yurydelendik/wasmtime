@@ -16,7 +16,6 @@ cranelift-codegen = "0.30.0"
 cranelift-entity = "0.30.0"
 cranelift-wasm = "0.30.0"
 cranelift-frontend = "0.30.0"
-cranelift-debug = "0.30.0"
 wasmtime-environ = { path = "../wasmtime-environ", default-features = false }
 wasmtime-runtime = { path = "../wasmtime-runtime", default-features = false }
 region = "2.0.0"

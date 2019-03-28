@@ -25,7 +25,7 @@ path = "src/wasm2obj.rs"
 [dependencies]
 cranelift-codegen = "0.30.0"
 cranelift-native = "0.30.0"
-cranelift-debug = "0.30.0"
+cranelift-wasm = "0.30.0"
 wasmtime-environ = { path = "wasmtime-environ" }
 wasmtime-runtime = { path = "wasmtime-runtime" }
 wasmtime-jit = { path = "wasmtime-jit" }
@@ -48,4 +48,3 @@ cranelift-codegen = { path = "../cranelift/cranelift-codegen" }
 cranelift-native = { path = "../cranelift/cranelift-native" }
 cranelift-entity = { path = "../cranelift/cranelift-entity" }
 cranelift-wasm = { path = "../cranelift/cranelift-wasm" }
-cranelift-debug = { path = "../cranelift/cranelift-debug" }

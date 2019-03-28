@@ -34,8 +34,8 @@ extern crate serde_derive;
 
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
-use cranelift_debug::{emit_debugsections, read_debuginfo};
 use cranelift_native;
+use cranelift_wasm::debug::{emit_debugsections, read_debuginfo};
 use docopt::Docopt;
 use faerie::Artifact;
 use std::error::Error;
