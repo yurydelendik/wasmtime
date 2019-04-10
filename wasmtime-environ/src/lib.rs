@@ -45,10 +45,15 @@ mod tunables;
 mod vmoffsets;
 
 pub mod cranelift;
+#[cfg(feature = "lightbeam")]
+pub mod lightbeam;
 
 pub use crate::compilation::{
-    Compilation, CompileError, Relocation, RelocationTarget, Relocations,
+    Compilation, CompileError, Compiler, Relocation, RelocationTarget, Relocations,
 };
+pub use crate::cranelift::Cranelift;
+#[cfg(feature = "lightbeam")]
+pub use crate::lightbeam::Lightbeam;
 pub use crate::module::{
     Export, MemoryPlan, MemoryStyle, Module, TableElements, TablePlan, TableStyle,
 };

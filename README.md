@@ -12,33 +12,38 @@ utility or as a library embedded in a larger application.
 [![Travis Status](https://travis-ci.org/CraneStation/wasmtime.svg?branch=master)](https://travis-ci.org/CraneStation/wasmtime)
 [![Appveyor Status](https://ci.appveyor.com/api/projects/status/vxvpt2plriy5s0mc?svg=true)](https://ci.appveyor.com/project/CraneStation/cranelift)
 [![Gitter chat](https://badges.gitter.im/CraneStation/CraneStation.svg)](https://gitter.im/CraneStation/Lobby)
-![Minimum rustc 1.30](https://img.shields.io/badge/rustc-1.30+-green.svg)
+![Minimum rustc 1.32](https://img.shields.io/badge/rustc-1.32+-green.svg)
 
-*Wasmtime is complete enough to pass the WebAssembly spec testsuite.* Support for
-system APIs is coming soon!
+Wasmtime passes the WebAssembly spec testsuite, and supports a new system
+API proposal called [WebAssembly System Interface], or WASI.
 
-One goal for this project is to implement [CloudABI](https://cloudabi.org/) using
-WebAssembly as the code format, provide [CloudABI system calls] as WebAssembly
-host imports, and then port the [Rust CloudABI package] and [CloudABI libc] to it
-to support Rust, C, C++, and other toolchains.
+To build Wasmtime, install cmake and clang, and then build with cargo, such
+as with "cargo build --release". For information on installing clang, see
+[rust-bindgen's documentation](https://github.com/rust-lang/rust-bindgen/blob/master/book/src/requirements.md).
 
-CloudABI is a natural complement for WebAssembly, since WebAssembly provides
-sandboxing for code but doesn't have any builtin I/O, and CloudABI provides
-sandboxed I/O.
+There are Rust, C, and C++ toolchains that can compile programs with WASI. See
+[here][WASI intro] for more information, and [here][WASI tutorial] for a
+tutorial on compiling and running programs using WASI and wasmtime, as
+well as an overview of the filesystem sandboxing system.
+
+Wasmtime does not yet implement Spectre mitigations, such as those being
+pioneered [by](https://www.wasmjit.org/blog/spectre-mitigations-part-1.html)
+[wasmjit](https://www.wasmjit.org/blog/spectre-mitigations-part-2.html),
+however this is a subject of ongoing research.
 
 [CloudABI]: https://cloudabi.org/
-[CloudABI system calls]: https://github.com/NuxiNL/cloudabi#specification-of-the-abi
-[Rust CloudABI package]: https://crates.io/crates/cloudabi
-[CloudABI libc]: https://github.com/NuxiNL/cloudlibc
+[WebAssembly System Interface]: docs/WASI-overview.md
+[WASI intro]: docs/WASI-intro.md
+[WASI tutorial]: docs/WASI-tutorial.md
 
 Additional goals for Wasmtime include:
- - Support a variety of host APIs (not just CloudABI), with fast calling sequences,
-   and develop proposals for system calls in the WebAssembly
+ - Support a variety of host APIs (not just WASI Core), with fast calling sequences,
+   and develop proposals for additional API modules to be part of WASI.
    [Reference Sysroot](https://github.com/WebAssembly/reference-sysroot).
  - Implement the [proposed WebAssembly C API].
  - Facilitate testing, experimentation, and development around the [Cranelift] and
    [Lightbeam] JITs.
- - Develop a the native ABI used for compiling WebAssembly suitable for use in both
+ - Develop a native ABI used for compiling WebAssembly suitable for use in both
    JIT and AOT to native object files.
 
 [proposed WebAssembly C API]: https://github.com/rossberg/wasm-c-api
