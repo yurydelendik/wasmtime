@@ -42,6 +42,9 @@ wabt = "0.7"
 
 [workspace]
 
+[features]
+default = ["cranelift-wasm/dwarf"]
+
 [patch.crates-io]
 gimli = { path = "../junk/gimli" }
 cranelift-codegen = { path = "../cranelift/cranelift-codegen" }
