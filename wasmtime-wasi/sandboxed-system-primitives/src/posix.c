@@ -243,10 +243,6 @@ __wasi_errno_t wasmtime_ssp_clock_time_get(
   return 0;
 }
 
-struct fd_prestat {
-  const char *dir;
-};
-
 void fd_prestats_init(
     struct fd_prestats *pt
 ) {
@@ -278,8 +274,10 @@ static bool fd_prestats_grow(
       return false;
 
     // Mark all new file descriptors as unused.
-    for (size_t i = pt->size; i < size; ++i)
-      prestats[i].dir = NULL;
+    for (size_t i = pt->size; i < size; ++i) {
+      prestats[i].dir_name = NULL;
+      prestats[i].dir_name_len = 0;
+    }
     pt->prestats = prestats;
     pt->size = size;
   }
@@ -299,7 +297,8 @@ bool fd_prestats_insert(
     return false;
   }
 
-  pt->prestats[fd].dir = strdup(dir);
+  pt->prestats[fd].dir_name = strdup(dir);
+  pt->prestats[fd].dir_name_len = strlen(dir);
   rwlock_unlock(&pt->lock);
   return true;
 }
@@ -314,7 +313,7 @@ static __wasi_errno_t fd_prestats_get_entry(
   if (fd >= pt->size)
     return __WASI_EBADF;
   struct fd_prestat *prestat = &pt->prestats[fd];
-  if (prestat->dir == NULL)
+  if (prestat->dir_name == NULL)
     return __WASI_EBADF;
 
   *ret = prestat;
@@ -653,59 +652,6 @@ static __wasi_errno_t fd_table_insert_fd(
   return fd_table_insert(ft, fo, rights_base, rights_inheriting, out);
 }
 
-__wasi_errno_t wasmtime_ssp_fd_prestat_get(
-#if !defined(WASMTIME_SSP_STATIC_CURFDS)
-    struct fd_prestats *prestats,
-#endif
-    __wasi_fd_t fd,
-    __wasi_prestat_t *buf
-) {
-  rwlock_rdlock(&prestats->lock);
-  struct fd_prestat *prestat;
-  __wasi_errno_t error = fd_prestats_get_entry(prestats, fd, &prestat);
-  if (error != 0) {
-    rwlock_unlock(&prestats->lock);
-    return error;
-  }
-
-  *buf = (__wasi_prestat_t) {
-    .pr_type = __WASI_PREOPENTYPE_DIR,
-  };
-
-  buf->u.dir.pr_name_len = strlen(prestat->dir);
-
-  rwlock_unlock(&prestats->lock);
-
-  return 0;
-}
-
-__wasi_errno_t wasmtime_ssp_fd_prestat_dir_name(
-#if !defined(WASMTIME_SSP_STATIC_CURFDS)
-    struct fd_prestats *prestats,
-#endif
-    __wasi_fd_t fd,
-    char *path,
-    size_t path_len
-) {
-  rwlock_rdlock(&prestats->lock);
-  struct fd_prestat *prestat;
-  __wasi_errno_t error = fd_prestats_get_entry(prestats, fd, &prestat);
-  if (error != 0) {
-    rwlock_unlock(&prestats->lock);
-    return error;
-  }
-  if (path_len != strlen(prestat->dir)) {
-    rwlock_unlock(&prestats->lock);
-    return EINVAL;
-  }
-
-  memcpy(path, prestat->dir, path_len);
-
-  rwlock_unlock(&prestats->lock);
-
-  return 0;
-}
-
 __wasi_errno_t wasmtime_ssp_fd_close(
 #if !defined(WASMTIME_SSP_STATIC_CURFDS)
     struct fd_table *curfds,
@@ -958,10 +904,27 @@ __wasi_errno_t wasmtime_ssp_fd_read(
 __wasi_errno_t wasmtime_ssp_fd_renumber(
 #if !defined(WASMTIME_SSP_STATIC_CURFDS)
     struct fd_table *curfds,
+    struct fd_prestats *prestats,
 #endif
     __wasi_fd_t from,
     __wasi_fd_t to
 ) {
+  // Don't allow renumbering over a pre-opened resource.
+  // TODO: Eventually, we do want to permit this, once libpreopen in
+  // userspace is capable of removing entries from its tables as well.
+  {
+    rwlock_rdlock(&prestats->lock);
+    struct fd_prestat *prestat;
+    __wasi_errno_t error = fd_prestats_get_entry(prestats, to, &prestat);
+    if (error != 0) {
+      error = fd_prestats_get_entry(prestats, from, &prestat);
+    }
+    rwlock_unlock(&prestats->lock);
+    if (error == 0) {
+      return __WASI_ENOTSUP;
+    }
+  }
+
   struct fd_table *ft = curfds;
   rwlock_wrlock(&ft->lock);
   struct fd_entry *fe_from;
@@ -1703,7 +1666,7 @@ __wasi_errno_t wasmtime_ssp_path_open(
   bool write =
       (rights_base & (__WASI_RIGHT_FD_DATASYNC | __WASI_RIGHT_FD_WRITE |
                       __WASI_RIGHT_FD_ALLOCATE |
-                      __WASI_RIGHT_PATH_FILESTAT_SET_SIZE)) != 0;
+                      __WASI_RIGHT_FD_FILESTAT_SET_SIZE)) != 0;
   int noflags = write ? read ? O_RDWR : O_WRONLY : O_RDONLY;
 
   // Which rights are needed on the directory file descriptor.
@@ -1721,7 +1684,7 @@ __wasi_errno_t wasmtime_ssp_path_open(
     noflags |= O_EXCL;
   if ((oflags & __WASI_O_TRUNC) != 0) {
     noflags |= O_TRUNC;
-    needed_inheriting |= __WASI_RIGHT_PATH_FILESTAT_SET_SIZE;
+    needed_base |= __WASI_RIGHT_PATH_FILESTAT_SET_SIZE;
   }
 
   // Convert file descriptor flags.
@@ -1763,8 +1726,9 @@ __wasi_errno_t wasmtime_ssp_path_open(
 
   int nfd = openat(pa.fd, pa.path, noflags, 0666);
   if (nfd < 0) {
+    int openat_errno = errno;
     // Linux returns ENXIO instead of EOPNOTSUPP when opening a socket.
-    if (errno == ENXIO) {
+    if (openat_errno == ENXIO) {
       struct stat sb;
       int ret =
           fstatat(pa.fd, pa.path, &sb, pa.follow ? 0 : AT_SYMLINK_NOFOLLOW);
@@ -1772,12 +1736,22 @@ __wasi_errno_t wasmtime_ssp_path_open(
       return ret == 0 && S_ISSOCK(sb.st_mode) ? __WASI_ENOTSUP
                                               : __WASI_ENXIO;
     }
+    // Linux returns ENOTDIR instead of ELOOP when using O_NOFOLLOW|O_DIRECTORY
+    // on a symlink.
+    if (openat_errno == ENOTDIR && (noflags & (O_NOFOLLOW | O_DIRECTORY)) != 0) {
+      struct stat sb;
+      int ret = fstatat(pa.fd, pa.path, &sb, AT_SYMLINK_NOFOLLOW);
+      if (S_ISLNK(sb.st_mode)) {
+        path_put(&pa);
+        return __WASI_ELOOP;
+      }
+    }
     path_put(&pa);
     // FreeBSD returns EMLINK instead of ELOOP when using O_NOFOLLOW on
     // a symlink.
-    if (!pa.follow && errno == EMLINK)
+    if (!pa.follow && openat_errno == EMLINK)
       return __WASI_ELOOP;
-    return convert_errno(errno);
+    return convert_errno(openat_errno);
   }
   path_put(&pa);
 
@@ -1965,8 +1939,7 @@ __wasi_errno_t wasmtime_ssp_path_rename(
   path_put(&old_pa);
   path_put(&new_pa);
   if (ret < 0) {
-    // Linux returns EBUSY in cases where EINVAL would be more suited.
-    return errno == EBUSY ? __WASI_EINVAL : convert_errno(errno);
+    return convert_errno(errno);
   }
   return 0;
 }
@@ -2502,12 +2475,6 @@ __wasi_errno_t wasmtime_ssp_poll_oneoff(
   return error;
 }
 
-void wasmtime_ssp_proc_exit(
-    __wasi_exitcode_t rval
-) {
-  _Exit(rval);
-}
-
 __wasi_errno_t wasmtime_ssp_proc_raise(
     __wasi_signal_t sig
 ) {
@@ -2658,12 +2625,6 @@ __wasi_errno_t wasmtime_ssp_sock_shutdown(
   int ret = shutdown(fd_number(fo), nhow);
   fd_object_release(fo);
   if (ret < 0)
-    return convert_errno(errno);
-  return 0;
-}
-
-__wasi_errno_t wasmtime_ssp_sched_yield(void) {
-  if (sched_yield() < 0)
     return convert_errno(errno);
   return 0;
 }

@@ -18,8 +18,12 @@
 #include "locking.h"
 
 struct fd_entry;
-struct fd_prestat;
 struct syscalls;
+
+struct fd_prestat {
+  const char *dir_name;
+  size_t dir_name_len;
+};
 
 struct fd_table {
   struct rwlock lock;

@@ -2,7 +2,8 @@ use crate::host::{argv_environ_values, fd_prestats, fd_table};
 use crate::instantiate::WASIState;
 use cranelift_codegen::ir::types::{Type, I32, I64};
 use host;
-use std::{ptr, slice, str};
+use host_impls;
+use std::{mem, ptr, slice, str};
 use translate::*;
 use wasm32;
 use wasmtime_runtime::VMContext;
@@ -379,7 +380,7 @@ syscalls! {
             return return_encoded_errno(e);
         }
 
-        let e = host::wasmtime_ssp_fd_prestat_get(prestats, fd, &mut host_buf);
+        let e = host_impls::wasmtime_ssp_fd_prestat_get(&mut *prestats, fd, &mut host_buf);
 
         encode_prestat_byref(vmctx, buf, host_buf);
 
@@ -403,7 +404,11 @@ syscalls! {
 
         trace!("     | (path,path_len)={:?}", str_for_trace(path, path_len));
 
-        let e = host::wasmtime_ssp_fd_prestat_dir_name(prestats, fd, path, path_len);
+        let e = host_impls::wasmtime_ssp_fd_prestat_dir_name(
+            &mut *prestats,
+            fd,
+            ::std::slice::from_raw_parts_mut(path, path_len),
+        );
 
         return_encoded_errno(e)
     }
@@ -573,10 +578,11 @@ syscalls! {
 
         let vmctx = &mut *vmctx;
         let curfds = get_curfds(vmctx);
+        let prestats = get_prestats(vmctx);
         let from = decode_fd(from);
         let to = decode_fd(to);
 
-        let e = host::wasmtime_ssp_fd_renumber(curfds, from, to);
+        let e = host::wasmtime_ssp_fd_renumber(curfds, prestats, from, to);
 
         return_encoded_errno(e)
     }
@@ -912,7 +918,7 @@ syscalls! {
         let fs_rights_base = decode_rights(fs_rights_base);
         let fs_rights_inheriting = decode_rights(fs_rights_inheriting);
         let fs_flags = decode_fdflags(fs_flags);
-        let mut host_fd = 0;
+        let mut host_fd = wasm32::__wasi_fd_t::max_value();
         if let Err(e) = decode_fd_byref(vmctx, fd) {
             return return_encoded_errno(e);
         }
@@ -1342,10 +1348,12 @@ syscalls! {
             Ok(in_) => in_,
             Err(e) => return return_encoded_errno(e),
         };
-        let mut host_out = match decode_event_slice(vmctx, out, nsubscriptions) {
-            Ok(out) => out,
+        let (out, out_len) = match decode_event_slice(vmctx, out, nsubscriptions) {
+            Ok((out, out_len)) => (out, out_len),
             Err(e) => return return_encoded_errno(e),
         };
+        let mut host_out = Vec::new();
+        host_out.resize(out_len, mem::zeroed());
         let mut host_nevents = 0;
         if let Err(e) = decode_usize_byref(vmctx, nevents) {
             return return_encoded_errno(e);
@@ -1364,25 +1372,26 @@ syscalls! {
         trace!("     | *nevents={:?}", host_nevents);
         encode_usize_byref(vmctx, nevents, host_nevents);
 
+        host_out.truncate(host_nevents);
         if log_enabled!(log::Level::Trace) {
             for (index, _event) in host_out.iter().enumerate() {
                 // TODO: Format the output for tracing.
                 trace!("     | *out[{}]=...", index);
             }
         }
-        encode_event_slice(vmctx, out, host_out);
+        encode_event_slice(out, host_out);
 
         return_encoded_errno(e)
     }
 
     pub unsafe extern "C" fn proc_exit(_vmctx: *mut VMContext, rval: u32,) -> () {
-        trace!("proc_exec(rval={:?})", rval);
+        trace!("proc_exit(rval={:?})", rval);
 
         let rval = decode_exitcode(rval);
 
         // TODO: Rather than call __wasi_proc_exit here, we should trigger a
         // stack unwind similar to a trap.
-        host::wasmtime_ssp_proc_exit(rval);
+        host_impls::wasmtime_ssp_proc_exit(rval);
     }
 
     pub unsafe extern "C" fn proc_raise(
@@ -1411,7 +1420,7 @@ syscalls! {
     }
 
     pub unsafe extern "C" fn sched_yield(_vmctx: *mut VMContext,) -> wasm32::__wasi_errno_t {
-        let e = host::wasmtime_ssp_sched_yield();
+        let e = host_impls::wasmtime_ssp_sched_yield();
 
         return_encoded_errno(e)
     }

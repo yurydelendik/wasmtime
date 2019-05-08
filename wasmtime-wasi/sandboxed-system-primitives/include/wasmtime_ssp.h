@@ -497,23 +497,6 @@ __wasi_errno_t wasmtime_ssp_environ_sizes_get(
     size_t *environ_buf_size
 ) WASMTIME_SSP_SYSCALL_NAME(environ_sizes_get) __attribute__((__warn_unused_result__));
 
-__wasi_errno_t wasmtime_ssp_fd_prestat_get(
-#if !defined(WASMTIME_SSP_STATIC_CURFDS)
-    struct fd_prestats *prestats,
-#endif
-    __wasi_fd_t fd,
-    __wasi_prestat_t *buf
-) WASMTIME_SSP_SYSCALL_NAME(fd_prestat_get) __attribute__((__warn_unused_result__));
-
-__wasi_errno_t wasmtime_ssp_fd_prestat_dir_name(
-#if !defined(WASMTIME_SSP_STATIC_CURFDS)
-    struct fd_prestats *prestats,
-#endif
-    __wasi_fd_t fd,
-    char *path,
-    size_t path_len
-) WASMTIME_SSP_SYSCALL_NAME(fd_prestat_dir_name) __attribute__((__warn_unused_result__));
-
 __wasi_errno_t wasmtime_ssp_fd_close(
 #if !defined(WASMTIME_SSP_STATIC_CURFDS)
     struct fd_table *curfds,
@@ -564,6 +547,7 @@ __wasi_errno_t wasmtime_ssp_fd_read(
 __wasi_errno_t wasmtime_ssp_fd_renumber(
 #if !defined(WASMTIME_SSP_STATIC_CURFDS)
     struct fd_table *curfds,
+    struct fd_prestats *prestats,
 #endif
     __wasi_fd_t from,
     __wasi_fd_t to
@@ -809,10 +793,6 @@ __wasi_errno_t wasmtime_ssp_poll_oneoff(
     size_t *nevents
 ) WASMTIME_SSP_SYSCALL_NAME(poll_oneoff) __attribute__((__warn_unused_result__));
 
-_Noreturn void wasmtime_ssp_proc_exit(
-    __wasi_exitcode_t rval
-) WASMTIME_SSP_SYSCALL_NAME(proc_exit);
-
 __wasi_errno_t wasmtime_ssp_proc_raise(
     __wasi_signal_t sig
 ) WASMTIME_SSP_SYSCALL_NAME(proc_raise) __attribute__((__warn_unused_result__));
@@ -852,9 +832,6 @@ __wasi_errno_t wasmtime_ssp_sock_shutdown(
     __wasi_fd_t sock,
     __wasi_sdflags_t how
 ) WASMTIME_SSP_SYSCALL_NAME(sock_shutdown) __attribute__((__warn_unused_result__));
-
-__wasi_errno_t wasmtime_ssp_sched_yield(void)
-    WASMTIME_SSP_SYSCALL_NAME(sched_yield) __attribute__((__warn_unused_result__));
 
 #ifdef __cplusplus
 }

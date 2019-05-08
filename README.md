@@ -17,6 +17,12 @@ utility or as a library embedded in a larger application.
 Wasmtime passes the WebAssembly spec testsuite, and supports a new system
 API proposal called [WebAssembly System Interface], or WASI.
 
+Wasmtime includes a git submodule; in order to build it, it's necessary to
+obtain a full checkout, like this:
+```
+git clone --recurse-submodules https://github.com/CraneStation/wasmtime.git.
+```
+
 To build Wasmtime, install cmake and clang, and then build with cargo, such
 as with "cargo build --release". For information on installing clang, see
 [rust-bindgen's documentation](https://github.com/rust-lang/rust-bindgen/blob/master/book/src/requirements.md).
@@ -49,5 +55,25 @@ Additional goals for Wasmtime include:
 [proposed WebAssembly C API]: https://github.com/rossberg/wasm-c-api
 [Cranelift]: https://github.com/CraneStation/cranelift
 [Lightbeam]: https://github.com/CraneStation/lightbeam
+
+#### Including Wasmtime in your project
+Wasmtime exposes an API for JIT compilation through the `wasmtime-jit` subcrate, which depends on `wasmtime-environ` and `wasmtime-runtime` for the ABI and runtime support respectively. However, this API is not documented and subject to change. Please use at your own risk!
+
+Build the individual crates as such:
+
+```
+cargo build --package wasmtime-jit
+```
+
+Wasmtime does not currently publish these crates on crates.io. They may be included as a git dependency, like this:
+
+```toml
+[dependencies]
+wasmtime-environ = { git = "https://github.com/CraneStation/wasmtime", rev = "somecommithash" }
+wasmtime-runtime = { git = "https://github.com/CraneStation/wasmtime", rev = "somecommithash" }
+wasmtime-jit = { git = "https://github.com/CraneStation/wasmtime", rev = "somecommithash" }
+```
+
+All three crates must be specified as dependencies for `wasmtime-jit` to build correctly, at the moment.
 
 It's Wasmtime.
