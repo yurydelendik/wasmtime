@@ -24,6 +24,8 @@ path = "src/wasm2obj.rs"
 [dependencies]
 cranelift-codegen = "0.30.0"
 cranelift-native = "0.30.0"
+cranelift-entity = "0.30.0"
+cranelift-wasm = "0.30.0"
 wasmtime-debug = { path = "wasmtime-debug" }
 wasmtime-environ = { path = "wasmtime-environ" }
 wasmtime-runtime = { path = "wasmtime-runtime" }
@@ -34,8 +36,8 @@ wasmtime-wasi = { path = "wasmtime-wasi" }
 docopt = "1.0.1"
 serde = "1.0.75"
 serde_derive = "1.0.75"
-faerie = "0.9.1"
-target-lexicon = { version = "0.3.0", default-features = false }
+faerie = "0.10.0"
+target-lexicon = { version = "0.4.0", default-features = false }
 pretty_env_logger = "0.3.0"
 file-per-thread-logger = "0.1.1"
 wabt = "0.7"
@@ -52,3 +54,11 @@ winapi = "0.3"
 
 [features]
 lightbeam = ["wasmtime-environ/lightbeam", "wasmtime-jit/lightbeam"]
+
+[patch.crates-io]
+gimli = { git = "https://github.com/gimli-rs/gimli", rev="423431f6747167af8e64cc8c8378f9a34a18ff8f" }
+cranelift-codegen = { git = "https://github.com/CraneStation/cranelift", rev = "cb7fccea1204d3880213bc5a0384f588eecf9806" }
+cranelift-wasm = { git = "https://github.com/CraneStation/cranelift", rev = "cb7fccea1204d3880213bc5a0384f588eecf9806" }
+cranelift-native = { git = "https://github.com/CraneStation/cranelift", rev = "cb7fccea1204d3880213bc5a0384f588eecf9806" }
+cranelift-entity = { git = "https://github.com/CraneStation/cranelift", rev = "cb7fccea1204d3880213bc5a0384f588eecf9806" }
+cranelift-frontend = { git = "https://github.com/CraneStation/cranelift", rev = "cb7fccea1204d3880213bc5a0384f588eecf9806" }

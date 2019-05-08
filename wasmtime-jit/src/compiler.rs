@@ -8,15 +8,16 @@ use cranelift_codegen::ir::InstBuilder;
 use cranelift_codegen::isa::{TargetFrontendConfig, TargetIsa};
 use cranelift_codegen::Context;
 use cranelift_codegen::{binemit, ir};
-use cranelift_entity::PrimaryMap;
+use cranelift_entity::{EntityRef, PrimaryMap};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-use cranelift_wasm::DefinedFuncIndex;
+use cranelift_wasm::{DefinedFuncIndex, DefinedMemoryIndex};
 use std::boxed::Box;
 use std::string::String;
 use std::vec::Vec;
-use wasmtime_debug::{emit_debugsections_image, DebugInfoData};
+use wasmtime_debug::{emit_debugsections_image, DebugInfoData, ModuleVmctxInfo};
 use wasmtime_environ::{
     Compilation, CompileError, Compiler as _C, FunctionBodyData, Module, Relocations, Tunables,
+    VMOffsets,
 };
 use wasmtime_runtime::{InstantiationError, SignatureRegistry, VMFunctionBody};
 
@@ -82,13 +83,14 @@ impl Compiler {
         ),
         SetupError,
     > {
-        let (compilation, relocations, address_transform) = DefaultCompiler::compile_module(
-            module,
-            function_body_inputs,
-            &*self.isa,
-            debug_data.is_some(),
-        )
-        .map_err(SetupError::Compile)?;
+        let (compilation, relocations, address_transform, value_ranges, stack_slots) =
+            DefaultCompiler::compile_module(
+                module,
+                function_body_inputs,
+                &*self.isa,
+                debug_data.is_some(),
+            )
+            .map_err(SetupError::Compile)?;
 
         let allocated_functions =
             allocate_functions(&mut self.code_memory, &compilation).map_err(|message| {
@@ -107,11 +109,23 @@ impl Compiler {
                 let body_len = compilation.get(i).len();
                 funcs.push((ptr, body_len));
             }
+            let module_vmctx_info = {
+                let ofs = VMOffsets::new(target_config.pointer_bytes(), &module);
+                let memory_offset = ofs.vmctx_vmmemory_definition(DefinedMemoryIndex::new(0))
+                    as i64
+                    + ofs.vmmemory_definition_base() as i64;
+                ModuleVmctxInfo {
+                    memory_offset,
+                    stack_slots,
+                }
+            };
             let bytes = emit_debugsections_image(
                 triple,
                 &target_config,
                 &debug_data,
+                &module_vmctx_info,
                 &address_transform,
+                &value_ranges,
                 &funcs,
             )
             .map_err(|e| SetupError::DebugInfo(e))?;

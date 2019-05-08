@@ -34,7 +34,9 @@ extern crate serde_derive;
 
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
+use cranelift_entity::EntityRef;
 use cranelift_native;
+use cranelift_wasm::DefinedMemoryIndex;
 use docopt::Docopt;
 use faerie::Artifact;
 use std::error::Error;
@@ -48,8 +50,8 @@ use std::process;
 use std::str;
 use std::str::FromStr;
 use target_lexicon::Triple;
-use wasmtime_debug::{emit_debugsections, read_debuginfo};
-use wasmtime_environ::{Compiler, Cranelift, ModuleEnvironment, Tunables};
+use wasmtime_debug::{emit_debugsections, read_debuginfo, ModuleVmctxInfo};
+use wasmtime_environ::{Compiler, Cranelift, ModuleEnvironment, Tunables, VMOffsets};
 use wasmtime_obj::emit_module;
 
 const USAGE: &str = "
@@ -159,13 +161,24 @@ fn handle_module(
         )
     };
 
-    let (compilation, relocations, address_transform) = Cranelift::compile_module(
-        &module,
-        lazy_function_body_inputs,
-        &*isa,
-        generate_debug_info,
-    )
-    .map_err(|e| e.to_string())?;
+    let (compilation, relocations, address_transform, value_ranges, stack_slots) =
+        Cranelift::compile_module(
+            &module,
+            lazy_function_body_inputs,
+            &*isa,
+            generate_debug_info,
+        )
+        .map_err(|e| e.to_string())?;
+
+    let module_vmctx_info = {
+        let ofs = VMOffsets::new(target_config.pointer_bytes(), &module);
+        let memory_offset = ofs.vmctx_vmmemory_definition(DefinedMemoryIndex::new(0)) as i64
+            + ofs.vmmemory_definition_base() as i64;
+        ModuleVmctxInfo {
+            memory_offset,
+            stack_slots,
+        }
+    };
 
     emit_module(
         &mut obj,
@@ -178,8 +191,15 @@ fn handle_module(
 
     if generate_debug_info {
         let debug_data = read_debuginfo(&data);
-        emit_debugsections(&mut obj, &target_config, &debug_data, &address_transform)
-            .map_err(|e| e.to_string())?;
+        emit_debugsections(
+            &mut obj,
+            &module_vmctx_info,
+            &target_config,
+            &debug_data,
+            &address_transform,
+            &value_ranges,
+        )
+        .map_err(|e| e.to_string())?;
     }
 
     // FIXME: Make the format a parameter.
