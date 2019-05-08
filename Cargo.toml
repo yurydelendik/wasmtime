@@ -35,8 +35,8 @@ wasmtime-wasi = { path = "wasmtime-wasi" }
 docopt = "1.0.1"
 serde = "1.0.75"
 serde_derive = "1.0.75"
-faerie = "0.9.1"
-target-lexicon = { version = "0.3.0", default-features = false }
+faerie = "0.10.0"
+target-lexicon = { version = "0.4.0", default-features = false }
 pretty_env_logger = "0.3.0"
 file-per-thread-logger = "0.1.1"
 wabt = "0.7"
@@ -50,8 +50,8 @@ default = ["cranelift-wasm/dwarf"]
 lightbeam = ["wasmtime-environ/lightbeam", "wasmtime-jit/lightbeam"]
 
 [patch.crates-io]
-gimli = { path = "../junk/gimli" }
 cranelift-codegen = { path = "../cranelift/cranelift-codegen" }
 cranelift-native = { path = "../cranelift/cranelift-native" }
 cranelift-entity = { path = "../cranelift/cranelift-entity" }
 cranelift-wasm = { path = "../cranelift/cranelift-wasm" }
+cranelift-frontend = { path = "../cranelift/cranelift-frontend" }
