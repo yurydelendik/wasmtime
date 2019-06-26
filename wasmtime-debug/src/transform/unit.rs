@@ -373,17 +373,18 @@ where
     let mut current_value_range = InheritedAttr::new();
     let mut current_scope_ranges = InheritedAttr::new();
     while let Some((depth_delta, entry)) = entries.next_dfs()? {
-        let depth_delta = if let Some(depth) = skip_at_depth {
+        let depth_delta = if let Some((depth, cached)) = skip_at_depth {
             let new_depth = depth + depth_delta;
-            if new_depth >= 0 {
-                skip_at_depth = Some(new_depth);
+            if new_depth > 0 {
+                skip_at_depth = Some((new_depth, cached));
                 continue;
             }
             skip_at_depth = None;
-            new_depth
+            new_depth + cached
         } else {
             depth_delta
         };
+
         let new_stack_len = stack.len().wrapping_add(depth_delta as usize);
         current_frame_base.update(new_stack_len);
         current_scope_ranges.update(new_stack_len);
@@ -404,7 +405,7 @@ where
                 }
             } else {
                 // Subprogram was not compiled: discarding all its info.
-                skip_at_depth = Some(0);
+                skip_at_depth = Some((0, depth_delta));
                 continue;
             }
             current_scope_ranges.push(new_stack_len, range_builder.get_ranges(addr_tr));
