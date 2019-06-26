@@ -73,15 +73,23 @@ int main(int argc, char **argv) {
 We'll put this source in a file called `demo.c`.
 
 The [wasi-sdk](https://github.com/CraneStation/wasi-sdk/releases) provides a clang
-which is configured to target WASI and use the WASI sysroot by default, so we can
+which is configured to target WASI and use the WASI sysroot by default if you put the extracted tree into `/`, so we can
 compile our program like so:
 
 ```
 $ clang demo.c -o demo.wasm
 ```
 
-A few things to note here. First, this is just regular clang, configured to use
-a WebAssembly target and sysroot. Second, the output name specified with the "-o"
+If you would want to extract it elsewhere, you can specify the sysroot directory like so
+
+```
+$ clang demo.c --sysroot <path to sysroot> -o demo.wasm
+```
+
+If you're using the wasi-sdk, the sysroot directory is located in `opt/wasi-sdk/share/sysroot/` on Linux and mac.
+
+This is just regular clang, configured to use
+a WebAssembly target and sysroot. The output name specified with the "-o"
 flag can be anything you want, and *does not* need to contain the `.wasm` extension.
 In fact, the output of clang here is a standard WebAssembly module:
 
