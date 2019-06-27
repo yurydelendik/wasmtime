@@ -337,7 +337,8 @@ where
                 {
                     addr
                 } else {
-                    return Err(TransformError("No low_pc for unit header").into());
+                    // FIXME? return Err(TransformError("No low_pc for unit header").into());
+                    0
                 };
 
                 clone_die_attributes(
