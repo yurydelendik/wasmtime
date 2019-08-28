@@ -2,20 +2,18 @@
 //! invoking its exported function.
 
 use failure::{format_err, Error};
-use std::cell::RefCell;
 use std::fs::read;
-use std::rc::Rc;
 use wasmtime_api::*;
 
 fn main() -> Result<(), Error> {
     let wasm = read("examples/gcd.wasm")?;
 
     // Instantiate engine and store.
-    let engine = Rc::new(RefCell::new(Engine::default()));
-    let store = Rc::new(RefCell::new(Store::new(engine)));
+    let engine = Ref::new(Engine::default());
+    let store = Ref::new(Store::new(engine));
 
     // Load a module.
-    let module = Rc::new(RefCell::new(Module::new(store.clone(), &wasm)?));
+    let module = Ref::new(Module::new(store.clone(), &wasm)?);
 
     // Find index of the `gcd` export.
     let gcd_index = module
@@ -28,7 +26,7 @@ fn main() -> Result<(), Error> {
         .0;
 
     // Instantiate the module.
-    let instance = Rc::new(RefCell::new(Instance::new(store.clone(), module, &[])?));
+    let instance = Ref::new(Instance::new(store.clone(), module, &[])?);
 
     // Invoke `gcd` export
     let gcd = instance.borrow().exports()[gcd_index]

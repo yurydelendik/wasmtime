@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::mem;
 use std::ptr;
 use std::rc::Rc;
@@ -8,12 +7,13 @@ use wasmtime_runtime::{
 };
 
 use crate::callable::WasmtimeFn;
+use crate::r#ref::Ref;
 use crate::runtime::SignatureRegistry;
 use crate::runtime::Store;
 use crate::types::TableType;
 use crate::values::{AnyRef, FuncRef, Val};
 
-fn into_checked_anyfunc(val: Val, store: &Rc<RefCell<Store>>) -> VMCallerCheckedAnyfunc {
+fn into_checked_anyfunc(val: Val, store: &Ref<Store>) -> VMCallerCheckedAnyfunc {
     match val {
         Val::AnyRef(AnyRef::Null) => VMCallerCheckedAnyfunc {
             func_ptr: ptr::null(),
@@ -40,7 +40,7 @@ fn into_checked_anyfunc(val: Val, store: &Rc<RefCell<Store>>) -> VMCallerChecked
     }
 }
 
-unsafe fn from_checked_anyfunc(item: &VMCallerCheckedAnyfunc, store: &Rc<RefCell<Store>>) -> Val {
+unsafe fn from_checked_anyfunc(item: &VMCallerCheckedAnyfunc, store: &Ref<Store>) -> Val {
     if item.type_index == VMSharedSignatureIndex::default() {
         return Val::AnyRef(AnyRef::Null);
     }
@@ -59,11 +59,7 @@ unsafe fn from_checked_anyfunc(item: &VMCallerCheckedAnyfunc, store: &Rc<RefCell
     Val::FuncRef(FuncRef(Rc::new(f)))
 }
 
-pub unsafe fn get_item(
-    table: *mut VMTableDefinition,
-    store: &Rc<RefCell<Store>>,
-    index: u32,
-) -> Val {
+pub unsafe fn get_item(table: *mut VMTableDefinition, store: &Ref<Store>, index: u32) -> Val {
     let base = slice::from_raw_parts(
         (*table).base as *const VMCallerCheckedAnyfunc,
         (*table).current_elements,
@@ -74,7 +70,7 @@ pub unsafe fn get_item(
 
 pub unsafe fn set_item(
     table: *mut VMTableDefinition,
-    store: &Rc<RefCell<Store>>,
+    store: &Ref<Store>,
     index: u32,
     val: Val,
 ) -> bool {
@@ -97,7 +93,7 @@ pub unsafe fn get_size(table: *mut VMTableDefinition) -> u32 {
 pub unsafe fn grow_table(
     table: *mut VMTableDefinition,
     table_type: &TableType,
-    store: &Rc<RefCell<Store>>,
+    store: &Ref<Store>,
     delta: u32,
     init: Val,
 ) -> bool {
