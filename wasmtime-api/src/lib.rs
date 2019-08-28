@@ -23,7 +23,7 @@ pub use crate::callable::Callable;
 pub use crate::externals::*;
 pub use crate::instance::Instance;
 pub use crate::module::Module;
-pub use crate::r#ref::Ref;
+pub use crate::r#ref::{HostInfo, Ref};
 pub use crate::runtime::{Config, Engine, Store};
 pub use crate::trap::Trap;
 pub use crate::types::*;

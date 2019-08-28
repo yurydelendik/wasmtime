@@ -7,8 +7,8 @@
 
 use super::{
     AnyRef, Callable, Engine, ExportType, Extern, ExternType, Func, FuncType, Global, GlobalType,
-    ImportType, Instance, Limits, Memory, MemoryType, Module, Name, Ref, Store, Table, TableType,
-    Trap, Val, ValType,
+    HostInfo, ImportType, Instance, Limits, Memory, MemoryType, Module, Name, Ref, Store, Table,
+    TableType, Trap, Val, ValType,
 };
 use std::boxed::Box;
 use std::mem;
@@ -1458,11 +1458,32 @@ pub unsafe extern "C" fn wasm_tabletype_new(
     Box::into_raw(tt)
 }
 
+struct HostInfoState {
+    info: *mut ::std::os::raw::c_void,
+    finalizer: ::std::option::Option<unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void)>,
+}
+
+impl HostInfo for HostInfoState {
+    fn finalize(&mut self) {
+        if let Some(f) = &self.finalizer {
+            unsafe {
+                f(self.info);
+            }
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn wasm_instance_set_host_info_with_finalizer(
-    _instance: *mut wasm_instance_t,
-    _info: *mut ::std::os::raw::c_void,
-    _finalizer: ::std::option::Option<unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void)>,
+    instance: *mut wasm_instance_t,
+    info: *mut ::std::os::raw::c_void,
+    finalizer: ::std::option::Option<unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void)>,
 ) {
-    panic!()
+    let info = if info.is_null() && finalizer.is_none() {
+        None
+    } else {
+        let b: Box<dyn HostInfo> = Box::new(HostInfoState { info, finalizer });
+        Some(b)
+    };
+    (*instance).instance.set_host_info(info);
 }
