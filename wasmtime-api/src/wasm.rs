@@ -6,9 +6,9 @@
 // TODO complete the C API
 
 use super::{
-    AnyRef, Callable, Engine, ExportType, Extern, ExternType, Func, FuncRef, FuncType, Global,
-    GlobalType, ImportType, Instance, Limits, Memory, MemoryType, Module, Name, Ref, Store, Table,
-    TableType, Trap, Val, ValType,
+    AnyRef, Callable, Engine, ExportType, Extern, ExternType, Func, FuncType, Global, GlobalType,
+    ImportType, Instance, Limits, Memory, MemoryType, Module, Name, Ref, Store, Table, TableType,
+    Trap, Val, ValType,
 };
 use std::boxed::Box;
 use std::mem;
@@ -1340,7 +1340,7 @@ pub unsafe extern "C" fn wasm_extern_as_table(e: *mut wasm_extern_t) -> *mut was
 
 #[no_mangle]
 pub unsafe extern "C" fn wasm_func_as_ref(f: *mut wasm_func_t) -> *mut wasm_ref_t {
-    let r = (*f).func.borrow().make_ref();
+    let r = (*f).func.clone();
     let f = Box::new(wasm_ref_t { r: AnyRef::Func(r) });
     Box::into_raw(f)
 }

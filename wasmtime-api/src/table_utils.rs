@@ -1,17 +1,16 @@
 use std::mem;
 use std::ptr;
-use std::rc::Rc;
 use std::slice;
 use wasmtime_runtime::{
     InstanceHandle, VMCallerCheckedAnyfunc, VMSharedSignatureIndex, VMTableDefinition,
 };
 
-use crate::callable::WasmtimeFn;
+use crate::externals::Func;
 use crate::r#ref::Ref;
 use crate::runtime::SignatureRegistry;
 use crate::runtime::Store;
 use crate::types::TableType;
-use crate::values::{AnyRef, FuncRef, Val};
+use crate::values::{AnyRef, Val};
 
 fn into_checked_anyfunc(val: Val, store: &Ref<Store>) -> VMCallerCheckedAnyfunc {
     match val {
@@ -21,15 +20,17 @@ fn into_checked_anyfunc(val: Val, store: &Ref<Store>) -> VMCallerCheckedAnyfunc 
             vmctx: ptr::null_mut(),
         },
         Val::AnyRef(AnyRef::Func(f)) | Val::FuncRef(f) => {
-            let (vmctx, func_ptr, signature) = match f.0.wasmtime_export() {
+            let (vmctx, func_ptr, type_index) = match f.borrow().wasmtime_export() {
                 wasmtime_runtime::Export::Function {
                     vmctx,
                     address,
                     signature,
-                } => (*vmctx, *address, signature),
+                } => {
+                    let type_index = store.borrow_mut().register_cranelift_signature(signature);
+                    (*vmctx, *address, type_index)
+                }
                 _ => panic!("expected function export"),
             };
-            let type_index = store.borrow_mut().register_cranelift_signature(signature);
             VMCallerCheckedAnyfunc {
                 func_ptr,
                 type_index,
@@ -55,8 +56,8 @@ unsafe fn from_checked_anyfunc(item: &VMCallerCheckedAnyfunc, store: &Ref<Store>
         signature,
         vmctx: item.vmctx,
     };
-    let f = WasmtimeFn::new(store.clone(), instance_handle, export);
-    Val::FuncRef(FuncRef(Rc::new(f)))
+    let f = Func::from_wasmtime_function(export, store.clone(), instance_handle);
+    Val::FuncRef(Ref::new(f))
 }
 
 pub unsafe fn get_item(table: *mut VMTableDefinition, store: &Ref<Store>, index: u32) -> Val {

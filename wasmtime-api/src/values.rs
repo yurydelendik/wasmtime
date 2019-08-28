@@ -1,4 +1,5 @@
-use crate::callable::WrappedCallable;
+use crate::externals::Func;
+use crate::r#ref::Ref;
 use crate::types::ValType;
 use std::any::Any;
 use std::fmt;
@@ -12,7 +13,7 @@ use wasmtime_jit::RuntimeValue;
 pub enum AnyRef {
     Null,
     Rc(Rc<dyn Any>),
-    Func(FuncRef),
+    Func(Ref<Func>),
 }
 
 impl AnyRef {
@@ -26,23 +27,14 @@ impl fmt::Debug for AnyRef {
         match self {
             AnyRef::Null => write!(f, "null"),
             AnyRef::Rc(_) => write!(f, "anyref"),
-            AnyRef::Func(func) => func.fmt(f),
+            AnyRef::Func(_) => write!(f, "funcref"),
         }
     }
 }
 
-#[derive(Clone)]
-pub struct FuncRef(pub(crate) Rc<dyn WrappedCallable + 'static>);
-
-impl fmt::Debug for FuncRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "funcref")
-    }
-}
-
-impl From<AnyRef> for FuncRef {
-    fn from(anyref: AnyRef) -> FuncRef {
-        match anyref {
+impl Into<Ref<Func>> for AnyRef {
+    fn into(self) -> Ref<Func> {
+        match self {
             AnyRef::Func(f) => f,
             AnyRef::Rc(_) => unimplemented!("try to unwrap?"),
             AnyRef::Null => panic!("null anyref"),
@@ -50,9 +42,9 @@ impl From<AnyRef> for FuncRef {
     }
 }
 
-impl Into<AnyRef> for FuncRef {
-    fn into(self) -> AnyRef {
-        AnyRef::Func(self)
+impl From<Ref<Func>> for AnyRef {
+    fn from(r: Ref<Func>) -> AnyRef {
+        AnyRef::Func(r)
     }
 }
 
@@ -63,7 +55,7 @@ pub enum Val {
     F32(u32),
     F64(u64),
     AnyRef(AnyRef),
-    FuncRef(FuncRef),
+    FuncRef(Ref<Func>),
 }
 
 impl Val {
@@ -184,8 +176,8 @@ impl From<AnyRef> for Val {
     }
 }
 
-impl From<FuncRef> for Val {
-    fn from(val: FuncRef) -> Val {
+impl From<Ref<Func>> for Val {
+    fn from(val: Ref<Func>) -> Val {
         Val::FuncRef(val)
     }
 }

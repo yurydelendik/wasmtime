@@ -5,7 +5,7 @@ use crate::table_utils;
 use crate::trampoline::{generate_global_export, generate_memory_export, generate_table_export};
 use crate::trap::Trap;
 use crate::types::{ExternType, FuncType, GlobalType, MemoryType, TableType, ValType};
-use crate::values::{FuncRef, Val};
+use crate::values::Val;
 use std::rc::Rc;
 use std::result::Result;
 use wasmtime_runtime::InstanceHandle;
@@ -113,10 +113,6 @@ impl Func {
         &self.r#type
     }
 
-    pub fn make_ref(&self) -> FuncRef {
-        FuncRef(self.callable.clone())
-    }
-
     pub fn param_arity(&self) -> usize {
         self.r#type.params().len()
     }
@@ -131,11 +127,11 @@ impl Func {
         Ok(results.into_boxed_slice())
     }
 
-    fn wasmtime_export(&self) -> &wasmtime_runtime::Export {
+    pub(crate) fn wasmtime_export(&self) -> &wasmtime_runtime::Export {
         self.callable.wasmtime_export()
     }
 
-    fn from_wasmtime_function(
+    pub(crate) fn from_wasmtime_function(
         export: wasmtime_runtime::Export,
         store: Ref<Store>,
         instance_handle: InstanceHandle,
@@ -147,6 +143,12 @@ impl Func {
         };
         let callable = WasmtimeFn::new(store.clone(), instance_handle, export.clone());
         Func::from_wrapped(store, ty, Rc::new(callable))
+    }
+}
+
+impl std::fmt::Debug for Func {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Func")
     }
 }
 
