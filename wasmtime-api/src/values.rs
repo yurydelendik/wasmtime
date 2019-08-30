@@ -1,52 +1,10 @@
 use crate::externals::Func;
-use crate::r#ref::Ref;
+use crate::r#ref::{AnyRef, Ref};
 use crate::types::ValType;
-use std::any::Any;
-use std::fmt;
 use std::ptr;
-use std::rc::Rc;
 
 use cranelift_codegen::ir;
 use wasmtime_jit::RuntimeValue;
-
-#[derive(Clone)]
-pub enum AnyRef {
-    Null,
-    Rc(Rc<dyn Any>),
-    Func(Ref<Func>),
-}
-
-impl AnyRef {
-    pub fn null() -> AnyRef {
-        AnyRef::Null
-    }
-}
-
-impl fmt::Debug for AnyRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AnyRef::Null => write!(f, "null"),
-            AnyRef::Rc(_) => write!(f, "anyref"),
-            AnyRef::Func(_) => write!(f, "funcref"),
-        }
-    }
-}
-
-impl Into<Ref<Func>> for AnyRef {
-    fn into(self) -> Ref<Func> {
-        match self {
-            AnyRef::Func(f) => f,
-            AnyRef::Rc(_) => unimplemented!("try to unwrap?"),
-            AnyRef::Null => panic!("null anyref"),
-        }
-    }
-}
-
-impl From<Ref<Func>> for AnyRef {
-    fn from(r: Ref<Func>) -> AnyRef {
-        AnyRef::Func(r)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum Val {
@@ -169,9 +127,15 @@ impl Into<f64> for Val {
 
 impl From<AnyRef> for Val {
     fn from(val: AnyRef) -> Val {
-        match val {
-            AnyRef::Func(f) => Val::FuncRef(f),
-            _ => Val::AnyRef(val),
+        match &val {
+            AnyRef::Ref(r) => {
+                if r.is_ref::<Func>() {
+                    Val::FuncRef(r.get_ref())
+                } else {
+                    Val::AnyRef(val)
+                }
+            }
+            _ => unimplemented!("AnyRef::Other"),
         }
     }
 }
@@ -186,7 +150,7 @@ impl Into<AnyRef> for Val {
     fn into(self) -> AnyRef {
         match self {
             Val::AnyRef(r) => r,
-            Val::FuncRef(f) => AnyRef::Func(f),
+            Val::FuncRef(f) => f.anyref(),
             _ => panic!("Invalid conversion of {:?} to anyref.", self),
         }
     }

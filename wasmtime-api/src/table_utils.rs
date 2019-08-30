@@ -6,11 +6,31 @@ use wasmtime_runtime::{
 };
 
 use crate::externals::Func;
+use crate::r#ref::AnyRef;
 use crate::r#ref::Ref;
 use crate::runtime::SignatureRegistry;
 use crate::runtime::Store;
 use crate::types::TableType;
-use crate::values::{AnyRef, Val};
+use crate::values::Val;
+
+fn make_checked_anyfunc(f: Ref<Func>, store: &Ref<Store>) -> VMCallerCheckedAnyfunc {
+    let (vmctx, func_ptr, type_index) = match f.borrow().wasmtime_export() {
+        wasmtime_runtime::Export::Function {
+            vmctx,
+            address,
+            signature,
+        } => {
+            let type_index = store.borrow_mut().register_cranelift_signature(signature);
+            (*vmctx, *address, type_index)
+        }
+        _ => panic!("expected function export"),
+    };
+    VMCallerCheckedAnyfunc {
+        func_ptr,
+        type_index,
+        vmctx,
+    }
+}
 
 fn into_checked_anyfunc(val: Val, store: &Ref<Store>) -> VMCallerCheckedAnyfunc {
     match val {
@@ -19,24 +39,8 @@ fn into_checked_anyfunc(val: Val, store: &Ref<Store>) -> VMCallerCheckedAnyfunc 
             type_index: VMSharedSignatureIndex::default(),
             vmctx: ptr::null_mut(),
         },
-        Val::AnyRef(AnyRef::Func(f)) | Val::FuncRef(f) => {
-            let (vmctx, func_ptr, type_index) = match f.borrow().wasmtime_export() {
-                wasmtime_runtime::Export::Function {
-                    vmctx,
-                    address,
-                    signature,
-                } => {
-                    let type_index = store.borrow_mut().register_cranelift_signature(signature);
-                    (*vmctx, *address, type_index)
-                }
-                _ => panic!("expected function export"),
-            };
-            VMCallerCheckedAnyfunc {
-                func_ptr,
-                type_index,
-                vmctx,
-            }
-        }
+        Val::AnyRef(AnyRef::Ref(f)) => make_checked_anyfunc(f.get_ref(), store),
+        Val::FuncRef(f) => make_checked_anyfunc(f, store),
         _ => panic!("val is not funcref"),
     }
 }

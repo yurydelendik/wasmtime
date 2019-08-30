@@ -1340,8 +1340,8 @@ pub unsafe extern "C" fn wasm_extern_as_table(e: *mut wasm_extern_t) -> *mut was
 
 #[no_mangle]
 pub unsafe extern "C" fn wasm_func_as_ref(f: *mut wasm_func_t) -> *mut wasm_ref_t {
-    let r = (*f).func.clone();
-    let f = Box::new(wasm_ref_t { r: AnyRef::Func(r) });
+    let r = (*f).func.anyref();
+    let f = Box::new(wasm_ref_t { r });
     Box::into_raw(f)
 }
 
@@ -1485,5 +1485,5 @@ pub unsafe extern "C" fn wasm_instance_set_host_info_with_finalizer(
         let b: Box<dyn HostInfo> = Box::new(HostInfoState { info, finalizer });
         Some(b)
     };
-    (*instance).instance.set_host_info(info);
+    (*instance).instance.anyref().set_host_info(info);
 }
