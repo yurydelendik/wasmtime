@@ -36,17 +36,15 @@ use docopt::Docopt;
 use failure::{bail, Error, ResultExt};
 use pretty_env_logger;
 use serde::Deserialize;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::path::Component;
 use std::path::{Path, PathBuf};
 use std::process::exit;
-use std::rc::Rc;
 use wabt;
 use wasi_common::preopen_dir;
-use wasmtime_api::{Config, Engine, Instance, Module, Store};
+use wasmtime_api::{Config, Engine, Instance, Module, Ref, Store};
 use wasmtime_environ::cache_conf;
 use wasmtime_interface_types::ModuleData;
 use wasmtime_jit::Features;
@@ -251,8 +249,8 @@ fn rmain() -> Result<(), Error> {
     }
 
     let config = Config::new(settings::Flags::new(flag_builder), features, debug_info);
-    let engine = Rc::new(RefCell::new(Engine::new(config)));
-    let store = Rc::new(RefCell::new(Store::new(engine)));
+    let engine = Ref::new(Engine::new(config));
+    let store = Ref::new(Store::new(engine));
 
     let mut module_registry = HashMap::new();
 
@@ -301,14 +299,14 @@ fn rmain() -> Result<(), Error> {
 }
 
 fn instantiate_module(
-    store: Rc<RefCell<Store>>,
+    store: Ref<Store>,
     module_registry: &HashMap<String, (Instance, HashMap<String, usize>)>,
     path: &Path,
-) -> Result<(Rc<RefCell<Instance>>, Rc<RefCell<Module>>, Vec<u8>), Error> {
+) -> Result<(Ref<Instance>, Ref<Module>, Vec<u8>), Error> {
     // Read the wasm module binary.
     let data = read_wasm(path.to_path_buf())?;
 
-    let module = Rc::new(RefCell::new(Module::new(store.clone(), &data)?));
+    let module = Ref::new(Module::new(store.clone(), &data)?);
 
     // Resolve import using module_registry.
     let imports = module
@@ -334,17 +332,13 @@ fn instantiate_module(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let instance = Rc::new(RefCell::new(Instance::new(
-        store.clone(),
-        module.clone(),
-        &imports,
-    )?));
+    let instance = Ref::new(Instance::new(store.clone(), module.clone(), &imports)?);
 
     Ok((instance, module, data))
 }
 
 fn handle_module(
-    store: Rc<RefCell<Store>>,
+    store: Ref<Store>,
     module_registry: &HashMap<String, (Instance, HashMap<String, usize>)>,
     args: &Args,
     path: &Path,
@@ -361,8 +355,8 @@ fn handle_module(
 }
 
 fn invoke_export(
-    store: Rc<RefCell<Store>>,
-    instance: Rc<RefCell<Instance>>,
+    store: Ref<Store>,
+    instance: Ref<Instance>,
     data: &ModuleData,
     name: &str,
     args: &Args,
