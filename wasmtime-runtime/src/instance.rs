@@ -1269,6 +1269,7 @@ fn initialize_globals(instance: &mut Instance) {
                 };
                 unsafe { *to = *from };
             }
+            GlobalInit::RefNullConst => *unsafe { (*to).as_ptr_mut() } = std::ptr::null_mut(),
             GlobalInit::Import => panic!("locally-defined global initialized as import"),
         }
     }

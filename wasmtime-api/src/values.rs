@@ -39,6 +39,14 @@ impl Val {
             Val::I64(i) => ptr::write(p as *mut i64, *i),
             Val::F32(u) => ptr::write(p as *mut u32, *u),
             Val::F64(u) => ptr::write(p as *mut u64, *u),
+            Val::AnyRef(r) => {
+                let v = if let AnyRef::Null = r {
+                    ptr::null_mut()
+                } else {
+                    Box::into_raw(Box::new(r.clone())) as *mut u8
+                };
+                ptr::write(p as *mut *mut u8, v)
+            }
             _ => unimplemented!("Val::write_value_to"),
         }
     }
@@ -49,6 +57,14 @@ impl Val {
             ir::types::I64 => Val::I64(ptr::read(p as *const i64)),
             ir::types::F32 => Val::F32(ptr::read(p as *const u32)),
             ir::types::F64 => Val::F64(ptr::read(p as *const u64)),
+            ir::types::R64 => {
+                let p = ptr::read(p as *const *mut u8);
+                if p.is_null() {
+                    Val::AnyRef(AnyRef::Null)
+                } else {
+                    Val::AnyRef((*(p as *mut AnyRef)).clone())
+                }
+            }
             _ => unimplemented!("Val::read_value_from"),
         }
     }

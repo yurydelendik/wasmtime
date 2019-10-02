@@ -196,9 +196,13 @@ pub fn create_handle_with_function(
     let sig = ft.get_cranelift_signature().clone();
 
     let isa = {
+        use cranelift_codegen::settings::Configurable;
         let isa_builder =
             cranelift_native::builder().expect("host machine is not a supported target");
-        let flag_builder = cranelift_codegen::settings::builder();
+        let mut flag_builder = cranelift_codegen::settings::builder();
+        flag_builder
+            .set("enable_safepoints", "true")
+            .expect("configured");
         isa_builder.finish(cranelift_codegen::settings::Flags::new(flag_builder))
     };
 

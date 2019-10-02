@@ -357,11 +357,15 @@ impl lightbeam::ModuleContext for FuncEnvironment<'_> {
     // TODO: type of a global
 }
 
-impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'module_environment> {
+impl<'module_environment> cranelift_wasm::TargetEnvironment
+    for FuncEnvironment<'module_environment>
+{
     fn target_config(&self) -> TargetFrontendConfig {
         self.target_config
     }
+}
 
+impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'module_environment> {
     fn make_table(&mut self, func: &mut ir::Function, index: TableIndex) -> WasmResult<ir::Table> {
         let pointer_type = self.pointer_type();
 

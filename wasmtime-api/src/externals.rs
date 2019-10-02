@@ -216,6 +216,15 @@ impl Global {
                 ValType::I64 => Val::from(*definition.as_i64()),
                 ValType::F32 => Val::from_f32_bits(*definition.as_u32()),
                 ValType::F64 => Val::from_f64_bits(*definition.as_u64()),
+                ValType::AnyRef => {
+                    let p: *mut u8 = *definition.as_ptr_mut();
+                    if p.is_null() {
+                        Val::AnyRef(AnyRef::Null)
+                    } else {
+                        let p = p as *mut AnyRef;
+                        Val::AnyRef((*p).clone())
+                    }
+                }
                 _ => unimplemented!("Global::get for {:?}", self.r#type().content()),
             }
         }
@@ -236,6 +245,14 @@ impl Global {
                 Val::I64(i) => *definition.as_i64_mut() = i,
                 Val::F32(f) => *definition.as_u32_mut() = f,
                 Val::F64(f) => *definition.as_u64_mut() = f,
+                Val::AnyRef(r) => {
+                    let p = if let AnyRef::Null = r {
+                        std::ptr::null_mut()
+                    } else {
+                        Box::into_raw(Box::new(r)) as *mut u8
+                    };
+                    *definition.as_ptr_mut() = p;
+                }
                 _ => unimplemented!("Global::set for {:?}", val.r#type()),
             }
         }

@@ -84,13 +84,15 @@ impl<'data> ModuleEnvironment<'data> {
     }
 }
 
-/// This trait is useful for `translate_module` because it tells how to translate
-/// enironment-dependent wasm instructions. These functions should not be called by the user.
-impl<'data> cranelift_wasm::ModuleEnvironment<'data> for ModuleEnvironment<'data> {
+impl<'data> cranelift_wasm::TargetEnvironment for ModuleEnvironment<'data> {
     fn target_config(&self) -> TargetFrontendConfig {
         self.result.target_config
     }
+}
 
+/// This trait is useful for `translate_module` because it tells how to translate
+/// enironment-dependent wasm instructions. These functions should not be called by the user.
+impl<'data> cranelift_wasm::ModuleEnvironment<'data> for ModuleEnvironment<'data> {
     fn reserve_signatures(&mut self, num: u32) -> WasmResult<()> {
         self.result
             .module

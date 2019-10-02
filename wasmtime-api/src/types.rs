@@ -65,6 +65,11 @@ impl ValType {
         }
     }
 
+    fn host_reftype() -> ir::Type {
+        // TODO 32-bit?
+        ir::types::R64
+    }
+
     pub(crate) fn get_cranelift_type(&self) -> ir::Type {
         match self {
             ValType::I32 => ir::types::I32,
@@ -72,6 +77,7 @@ impl ValType {
             ValType::F32 => ir::types::F32,
             ValType::F64 => ir::types::F64,
             ValType::V128 => ir::types::I8X16,
+            ValType::AnyRef => ValType::host_reftype(),
             _ => unimplemented!("get_cranelift_type other"),
         }
     }
@@ -83,6 +89,7 @@ impl ValType {
             ir::types::F32 => ValType::F32,
             ir::types::F64 => ValType::F64,
             ir::types::I8X16 => ValType::V128,
+            ir::types::R32 | ir::types::R64 => ValType::AnyRef,
             _ => unimplemented!("from_cranelift_type other"),
         }
     }

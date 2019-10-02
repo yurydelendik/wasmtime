@@ -13,7 +13,11 @@ use wasmtime_jit::Features;
 // Configuration
 
 fn default_flags() -> settings::Flags {
-    let flag_builder = settings::builder();
+    use cranelift_codegen::settings::Configurable;
+    let mut flag_builder = settings::builder();
+    flag_builder
+        .set("enable_safepoints", "true")
+        .expect("configured");
     settings::Flags::new(flag_builder)
 }
 

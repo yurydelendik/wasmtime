@@ -4,6 +4,7 @@ use std::fmt;
 use std::rc::{Rc, Weak};
 
 pub trait HostInfo {
+    fn as_any(&mut self) -> &mut dyn Any;
     fn finalize(&mut self) {}
 }
 
@@ -46,6 +47,16 @@ impl Drop for AnyAndHostInfo {
 #[derive(Clone)]
 pub struct OtherRef(Rc<RefCell<AnyAndHostInfo>>);
 
+impl OtherRef {
+    pub fn data(&self) -> cell::Ref<Box<dyn Any>> {
+        cell::Ref::map(self.0.borrow(), |r| &r.any)
+    }
+
+    pub fn data_mut(&self) -> cell::RefMut<Box<dyn Any>> {
+        cell::RefMut::map(self.0.borrow_mut(), |r| &mut r.any)
+    }
+}
+
 #[derive(Clone)]
 pub enum AnyRef {
     Null,
@@ -64,13 +75,6 @@ impl AnyRef {
 
     pub fn null() -> Self {
         AnyRef::Null
-    }
-
-    pub fn data(&self) -> cell::Ref<Box<dyn Any>> {
-        match self {
-            AnyRef::Other(OtherRef(r)) => cell::Ref::map(r.borrow(), |r| &r.any),
-            _ => panic!("expected AnyRef::Other"),
-        }
     }
 
     pub fn ptr_eq(&self, other: &AnyRef) -> bool {

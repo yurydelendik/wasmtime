@@ -478,6 +478,20 @@ impl wasm_val_t {
                 self.kind = from_valtype(&ValType::F64);
                 self.of = wasm_val_t__bindgen_ty_1 { u64: f };
             }
+            Val::AnyRef(r) => {
+                if let AnyRef::Null = r {
+                    self.kind = from_valtype(&ValType::AnyRef);
+                    self.of = wasm_val_t__bindgen_ty_1 {
+                        ref_: ptr::null_mut(),
+                    };
+                } else {
+                    let ref_ = Box::new(wasm_ref_t { r: r.clone() });
+                    self.kind = from_valtype(&ValType::AnyRef);
+                    self.of = wasm_val_t__bindgen_ty_1 {
+                        ref_: Box::into_raw(ref_),
+                    };
+                }
+            }
             _ => unimplemented!("wasm_val_t::from_val {:?}", val),
         }
     }
@@ -500,6 +514,21 @@ impl wasm_val_t {
                 kind: from_valtype(&ValType::F64),
                 of: wasm_val_t__bindgen_ty_1 { u64: *f },
             },
+            Val::AnyRef(AnyRef::Null) => wasm_val_t {
+                kind: from_valtype(&ValType::AnyRef),
+                of: wasm_val_t__bindgen_ty_1 {
+                    ref_: ptr::null_mut(),
+                },
+            },
+            Val::AnyRef(r) => {
+                let ref_ = Box::new(wasm_ref_t { r: r.clone() });
+                wasm_val_t {
+                    kind: from_valtype(&ValType::AnyRef),
+                    of: wasm_val_t__bindgen_ty_1 {
+                        ref_: Box::into_raw(ref_),
+                    },
+                }
+            }
             _ => unimplemented!("wasm_val_t::from_val {:?}", val),
         }
     }
@@ -510,8 +539,21 @@ impl wasm_val_t {
             ValType::I64 => Val::from(unsafe { self.of.i64 }),
             ValType::F32 => Val::from(unsafe { self.of.f32 }),
             ValType::F64 => Val::from(unsafe { self.of.f64 }),
+            ValType::AnyRef => {
+                if unsafe { self.of.ref_.is_null() } {
+                    Val::AnyRef(AnyRef::Null)
+                } else {
+                    let r = unsafe { (*self.of.ref_).r.clone() };
+                    Val::AnyRef(r)
+                }
+            }
             _ => unimplemented!("wasm_val_t::val {:?}", self.kind),
         }
+    }
+
+    fn uninitialize(&mut self) {
+        self.kind = 0;
+        self.of = wasm_val_t__bindgen_ty_1 { i32: 0 };
     }
 }
 
@@ -790,7 +832,9 @@ pub unsafe extern "C" fn wasm_func_new_with_env(
 #[no_mangle]
 pub unsafe extern "C" fn wasm_val_copy(out: *mut wasm_val_t, source: *const wasm_val_t) {
     *out = match into_valtype((*source).kind) {
-        ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 => (*source).clone(),
+        ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::AnyRef => {
+            (*source).clone()
+        }
         _ => unimplemented!("wasm_val_copy arg"),
     };
 }
@@ -1541,6 +1585,9 @@ struct HostInfoState {
 }
 
 impl HostInfo for HostInfoState {
+    fn as_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
     fn finalize(&mut self) {
         if let Some(f) = &self.finalizer {
             unsafe {
@@ -1563,4 +1610,72 @@ pub unsafe extern "C" fn wasm_instance_set_host_info_with_finalizer(
         Some(b)
     };
     (*instance).instance.anyref().set_host_info(info);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_foreign_as_ref(foreign: *mut wasm_foreign_t) -> *mut wasm_ref_t {
+    if foreign.is_null() {
+        return ptr::null_mut();
+    }
+    let foreign = Box::from_raw(foreign);
+    let r = Box::new(wasm_ref_t {
+        r: AnyRef::new(foreign),
+    });
+    Box::into_raw(r)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_foreign_new(_store: *mut wasm_store_t) -> *mut wasm_foreign_t {
+    let foreign = Box::new(wasm_foreign_t { _unused: [] });
+    Box::into_raw(foreign)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_ref_copy(r: *const wasm_ref_t) -> *mut wasm_ref_t {
+    Box::into_raw(Box::new((*r).clone()))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_ref_same(r1: *const wasm_ref_t, r2: *const wasm_ref_t) -> bool {
+    (*r1).r.ptr_eq(&(*r2).r)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_ref_get_host_info(
+    r: *const wasm_ref_t,
+) -> *mut ::std::os::raw::c_void {
+    if r.is_null() {
+        return ptr::null_mut();
+    }
+    match (*r).r.host_info() {
+        Some(mut info) => {
+            let t = info.as_any();
+            t.downcast_mut::<HostInfoState>()
+                .expect("HostInfoState")
+                .info
+        }
+        None => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_ref_set_host_info(
+    r: *mut wasm_ref_t,
+    info: *mut ::std::os::raw::c_void,
+) {
+    let info = if info.is_null() {
+        None
+    } else {
+        let b: Box<dyn HostInfo> = Box::new(HostInfoState {
+            info,
+            finalizer: None,
+        });
+        Some(b)
+    };
+    (*r).r.set_host_info(info);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_val_delete(v: *mut wasm_val_t) {
+    (*v).uninitialize();
 }

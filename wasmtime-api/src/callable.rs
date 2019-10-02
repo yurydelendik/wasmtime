@@ -69,6 +69,13 @@ impl WrappedCallable for WasmtimeFn {
                     Val::I64(x) => ptr::write(ptr as *mut i64, *x),
                     Val::F32(x) => ptr::write(ptr as *mut u32, *x),
                     Val::F64(x) => ptr::write(ptr as *mut u64, *x),
+                    Val::AnyRef(x) => ptr::write(ptr as *mut *mut u8, {
+                        if let crate::AnyRef::Null = x {
+                            ptr::null_mut()
+                        } else {
+                            Box::into_raw(Box::new(x.clone())) as *mut _
+                        }
+                    }),
                     _ => unimplemented!("WasmtimeFn arg"),
                 }
             }
@@ -104,6 +111,15 @@ impl WrappedCallable for WasmtimeFn {
                     ir::types::I64 => Val::I64(ptr::read(ptr as *const i64)),
                     ir::types::F32 => Val::F32(ptr::read(ptr as *const u32)),
                     ir::types::F64 => Val::F64(ptr::read(ptr as *const u64)),
+                    ir::types::R64 => {
+                        use crate::AnyRef;
+                        let p = ptr::read(ptr as *mut *mut u8);
+                        if p.is_null() {
+                            Val::AnyRef(AnyRef::Null)
+                        } else {
+                            Val::AnyRef((*(p as *mut AnyRef)).clone())
+                        }
+                    }
                     other => panic!("unsupported value type {:?}", other),
                 }
             }

@@ -414,6 +414,12 @@ impl VMGlobalDefinition {
     pub unsafe fn as_u128_bits_mut(&mut self) -> &mut [u8; 16] {
         &mut *(self.storage.as_mut().as_mut_ptr() as *mut [u8; 16])
     }
+
+    /// TODO
+    #[allow(clippy::cast_ptr_alignment)]
+    pub unsafe fn as_ptr_mut(&mut self) -> &mut *mut u8 {
+        &mut *(self.storage.as_mut().as_mut_ptr() as *mut *mut u8)
+    }
 }
 
 /// An index into the shared signature registry, usable for checking signatures
