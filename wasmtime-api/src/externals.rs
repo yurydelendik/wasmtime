@@ -217,7 +217,7 @@ impl Global {
                 ValType::F32 => Val::from_f32_bits(*definition.as_u32()),
                 ValType::F64 => Val::from_f64_bits(*definition.as_u64()),
                 ValType::AnyRef => {
-                    let p: *mut u8 = *definition.as_ptr_mut();
+                    let p = *definition.as_ptr_mut() as *mut AnyRef;
                     if p.is_null() {
                         Val::AnyRef(AnyRef::Null)
                     } else {

@@ -479,18 +479,13 @@ impl wasm_val_t {
                 self.of = wasm_val_t__bindgen_ty_1 { u64: f };
             }
             Val::AnyRef(r) => {
-                if let AnyRef::Null = r {
-                    self.kind = from_valtype(&ValType::AnyRef);
-                    self.of = wasm_val_t__bindgen_ty_1 {
-                        ref_: ptr::null_mut(),
-                    };
+                let ref_ = if let AnyRef::Null = r {
+                    ptr::null_mut()
                 } else {
-                    let ref_ = Box::new(wasm_ref_t { r: r.clone() });
-                    self.kind = from_valtype(&ValType::AnyRef);
-                    self.of = wasm_val_t__bindgen_ty_1 {
-                        ref_: Box::into_raw(ref_),
-                    };
-                }
+                    Box::into_raw(Box::new(wasm_ref_t { r }))
+                };
+                self.kind = from_valtype(&ValType::AnyRef);
+                self.of = wasm_val_t__bindgen_ty_1 { ref_ };
             }
             _ => unimplemented!("wasm_val_t::from_val {:?}", val),
         }
@@ -521,12 +516,14 @@ impl wasm_val_t {
                 },
             },
             Val::AnyRef(r) => {
-                let ref_ = Box::new(wasm_ref_t { r: r.clone() });
+                let ref_ = if let AnyRef::Null = r {
+                    ptr::null_mut()
+                } else {
+                    Box::into_raw(Box::new(wasm_ref_t { r: r.clone() }))
+                };
                 wasm_val_t {
                     kind: from_valtype(&ValType::AnyRef),
-                    of: wasm_val_t__bindgen_ty_1 {
-                        ref_: Box::into_raw(ref_),
-                    },
+                    of: wasm_val_t__bindgen_ty_1 { ref_ },
                 }
             }
             _ => unimplemented!("wasm_val_t::from_val {:?}", val),

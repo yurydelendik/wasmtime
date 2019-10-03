@@ -45,7 +45,7 @@ impl WasmtimeFn {
 impl WrappedCallable for WasmtimeFn {
     fn call(&self, params: &[Val], results: &mut [Val]) -> Result<(), HostRef<Trap>> {
         use core::cmp::max;
-        use core::{mem, ptr};
+        use core::mem;
 
         let (vmctx, body, signature) = match self.wasmtime_export() {
             Export::Function {
@@ -56,27 +56,16 @@ impl WrappedCallable for WasmtimeFn {
             _ => panic!("unexpected export type in Callable"),
         };
 
-        let value_size = mem::size_of::<u64>();
-        let mut values_vec: Vec<u64> = vec![0; max(params.len(), results.len())];
+        let value_size = mem::size_of::<i64>();
+        let mut values_vec: Vec<i64> = vec![0; max(params.len(), results.len())];
 
-        // Store the argument values into `values_vec`.
-        for (index, arg) in params.iter().enumerate() {
-            unsafe {
-                let ptr = values_vec.as_mut_ptr().add(index);
-
-                match arg {
-                    Val::I32(x) => ptr::write(ptr as *mut i32, *x),
-                    Val::I64(x) => ptr::write(ptr as *mut i64, *x),
-                    Val::F32(x) => ptr::write(ptr as *mut u32, *x),
-                    Val::F64(x) => ptr::write(ptr as *mut u64, *x),
-                    Val::AnyRef(x) => ptr::write(ptr as *mut *mut u8, {
-                        if let crate::AnyRef::Null = x {
-                            ptr::null_mut()
-                        } else {
-                            Box::into_raw(Box::new(x.clone())) as *mut _
-                        }
-                    }),
-                    _ => unimplemented!("WasmtimeFn arg"),
+        {
+            let mut tracker = self.store.borrow_mut();
+            // Store the argument values into `values_vec`.
+            for (index, arg) in params.iter().enumerate() {
+                unsafe {
+                    let ptr = values_vec.as_mut_ptr().add(index);
+                    arg.write_value_to(ptr, &mut *tracker);
                 }
             }
         }
@@ -91,13 +80,15 @@ impl WrappedCallable for WasmtimeFn {
             .map_err(|_| HostRef::new(Trap::fake()))?; //was ActionError::Setup)?;
 
         // Call the trampoline.
-        if let Err(message) = unsafe {
+        let call_result = unsafe {
             wasmtime_runtime::wasmtime_call_trampoline(
                 vmctx,
                 exec_code_buf,
                 values_vec.as_mut_ptr() as *mut u8,
             )
-        } {
+        };
+        //wrappers.into_iter().for_each(|p| unsafe { let _ = Box::from_raw(p); });
+        if let Err(message) = call_result {
             return Err(HostRef::new(Trap::new(message)));
         }
 
@@ -105,23 +96,8 @@ impl WrappedCallable for WasmtimeFn {
         for (index, abi_param) in signature.returns.iter().enumerate() {
             unsafe {
                 let ptr = values_vec.as_ptr().add(index);
-
-                results[index] = match abi_param.value_type {
-                    ir::types::I32 => Val::I32(ptr::read(ptr as *const i32)),
-                    ir::types::I64 => Val::I64(ptr::read(ptr as *const i64)),
-                    ir::types::F32 => Val::F32(ptr::read(ptr as *const u32)),
-                    ir::types::F64 => Val::F64(ptr::read(ptr as *const u64)),
-                    ir::types::R64 => {
-                        use crate::AnyRef;
-                        let p = ptr::read(ptr as *mut *mut u8);
-                        if p.is_null() {
-                            Val::AnyRef(AnyRef::Null)
-                        } else {
-                            Val::AnyRef((*(p as *mut AnyRef)).clone())
-                        }
-                    }
-                    other => panic!("unsupported value type {:?}", other),
-                }
+                let val = Val::read_value_from(ptr, abi_param.value_type);
+                results[index] = val;
             }
         }
 

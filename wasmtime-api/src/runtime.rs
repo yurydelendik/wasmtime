@@ -91,6 +91,12 @@ pub struct Store {
     signature_cache: HashMap<wasmtime_runtime::VMSharedSignatureIndex, ir::Signature>,
 }
 
+impl crate::values::ValWrappersTracker for Store {
+    fn add_anyref(&mut self, r: *mut crate::r#ref::AnyRef) {
+        eprintln!("leaked {:?}", r);
+    }
+}
+
 impl Store {
     pub fn new(engine: HostRef<Engine>) -> Store {
         let flags = engine.borrow().config().flags().clone();

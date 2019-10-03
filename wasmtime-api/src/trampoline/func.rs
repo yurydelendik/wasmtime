@@ -45,6 +45,18 @@ unsafe extern "C" fn stub_fn(vmctx: *mut VMContext, call_id: u32, values_vec: *m
         (args, signature.returns.len())
     };
 
+    let add_anyref = Box::new(|r: *mut crate::r#ref::AnyRef| {
+        eprintln!("leaked {:?}", r);
+    });
+    struct ValWrappersTracker<'a>(Box<dyn Fn(*mut crate::r#ref::AnyRef) + 'a>);
+    impl<'a> crate::values::ValWrappersTracker for ValWrappersTracker<'a> {
+        fn add_anyref(&mut self, r: *mut crate::r#ref::AnyRef) {
+            self.0(r)
+        }
+    }
+
+    let tracker = &mut ValWrappersTracker(add_anyref);
+
     let mut returns = vec![Val::default(); returns_len];
     let func = &instance
         .host_state()
@@ -56,7 +68,7 @@ unsafe extern "C" fn stub_fn(vmctx: *mut VMContext, call_id: u32, values_vec: *m
         Ok(()) => {
             for i in 0..returns_len {
                 // TODO check signature.returns[i].value_type ?
-                returns[i].write_value_to(values_vec.offset(i as isize));
+                let _ = returns[i].write_value_to(values_vec.offset(i as isize), tracker);
             }
             0
         }

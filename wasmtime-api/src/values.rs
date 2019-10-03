@@ -17,6 +17,10 @@ pub enum Val {
     FuncRef(HostRef<Func>),
 }
 
+pub(crate) trait ValWrappersTracker {
+    fn add_anyref(&mut self, r: *mut AnyRef);
+}
+
 impl Val {
     pub fn default() -> Val {
         Val::AnyRef(AnyRef::null())
@@ -33,7 +37,7 @@ impl Val {
         }
     }
 
-    pub(crate) unsafe fn write_value_to(&self, p: *mut i64) {
+    pub(crate) unsafe fn write_value_to(&self, p: *mut i64, wrappers: &mut dyn ValWrappersTracker) {
         match self {
             Val::I32(i) => ptr::write(p as *mut i32, *i),
             Val::I64(i) => ptr::write(p as *mut i64, *i),
@@ -43,9 +47,11 @@ impl Val {
                 let v = if let AnyRef::Null = r {
                     ptr::null_mut()
                 } else {
-                    Box::into_raw(Box::new(r.clone())) as *mut u8
+                    let p = Box::into_raw(Box::new(r.clone()));
+                    wrappers.add_anyref(p);
+                    p
                 };
-                ptr::write(p as *mut *mut u8, v)
+                ptr::write(p as *mut *mut AnyRef, v);
             }
             _ => unimplemented!("Val::write_value_to"),
         }
@@ -58,11 +64,11 @@ impl Val {
             ir::types::F32 => Val::F32(ptr::read(p as *const u32)),
             ir::types::F64 => Val::F64(ptr::read(p as *const u64)),
             ir::types::R64 => {
-                let p = ptr::read(p as *const *mut u8);
+                let p = ptr::read(p as *const *mut AnyRef);
                 if p.is_null() {
                     Val::AnyRef(AnyRef::Null)
                 } else {
-                    Val::AnyRef((*(p as *mut AnyRef)).clone())
+                    Val::AnyRef((*p).clone())
                 }
             }
             _ => unimplemented!("Val::read_value_from"),
