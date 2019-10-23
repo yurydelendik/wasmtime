@@ -21,7 +21,7 @@ impl Callable for Callback {
     }
 }
 
-fn main() -> Result<(), Error> {
+pub fn main() -> Result<(), Error> {
     // Initialize.
     println!("Initializing...");
     let engine = HostRef::new(Engine::new(Config::default()));

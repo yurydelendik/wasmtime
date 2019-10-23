@@ -5,7 +5,7 @@ use failure::{format_err, Error};
 use std::fs::read;
 use wasmtime_api::*;
 
-fn main() -> Result<(), Error> {
+pub fn main() -> Result<(), Error> {
     let wasm = read("examples/gcd.wasm")?;
 
     // Instantiate engine and store.
