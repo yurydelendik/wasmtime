@@ -26,12 +26,14 @@ failure_derive = { version = "0.1.3", default-features = false }
 target-lexicon = { version = "0.8.1", default-features = false }
 region = "2.0.0"
 hashbrown = { version = "0.6.0", optional = true }
+wasmtime-interface-types = { path="../wasmtime-interface-types", optional = true }
 
 [features]
 default = ["std"]
 std = ["cranelift-codegen/std", "cranelift-wasm/std", "wasmtime-environ/std", "wasmparser/std"]
 wasm-c-api = []
 core = ["hashbrown/nightly", "cranelift-codegen/core", "cranelift-wasm/core", "wasmtime-environ/core", "wasmparser/core"]
+interface-types = ["wasmtime-interface-types"]
 
 [dev-dependencies]
 # for wasmtime.rs

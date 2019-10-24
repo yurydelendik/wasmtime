@@ -88,6 +88,11 @@ impl Instance {
                     instance_handle.clone(),
                     export,
                 ));
+                if cfg!(feature = "interface-types") {
+                    if let Some(Extern::Func(f)) = exports.last_mut() {
+                        f.borrow_mut().bindings = Some((module.bindings.clone(), name));
+                    }
+                }
             }
             exports.into_boxed_slice()
         };

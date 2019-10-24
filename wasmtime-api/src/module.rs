@@ -8,8 +8,12 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use failure::Error;
+use std::rc::Rc;
 
 use wasmparser::{validate, ExternalKind, ImportSectionEntryType, ModuleReader, SectionCode};
+
+#[cfg(feature = "interface-types")]
+use wasmtime_interface_types as it;
 
 fn into_memory_type(mt: wasmparser::MemoryType) -> MemoryType {
     assert!(!mt.shared);
@@ -181,16 +185,22 @@ pub struct Module {
     binary: Box<[u8]>,
     imports: Box<[ImportType]>,
     exports: Box<[ExportType]>,
+    #[cfg(feature = "interface-types")]
+    pub(crate) bindings: Rc<it::ModuleData>,
 }
 
 impl Module {
     pub fn new(store: HostRef<Store>, binary: &[u8]) -> Result<Module, Error> {
         let (imports, exports) = read_imports_and_exports(binary)?;
+        #[cfg(feature = "interface-types")]
+        let bindings = Rc::new(it::ModuleData::new(binary)?);
         Ok(Module {
             store,
             binary: binary.into(),
             imports,
             exports,
+            #[cfg(feature = "interface-types")]
+            bindings,
         })
     }
     pub(crate) fn binary(&self) -> &[u8] {

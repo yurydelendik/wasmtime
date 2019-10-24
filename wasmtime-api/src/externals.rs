@@ -11,6 +11,9 @@ use core::result::Result;
 use core::slice;
 use wasmtime_runtime::InstanceHandle;
 
+#[cfg(feature = "interface-types")]
+use wasmtime_interface_types as it;
+
 // Externals
 
 #[derive(Clone)]
@@ -115,6 +118,8 @@ pub struct Func {
     _store: HostRef<Store>,
     callable: Rc<dyn WrappedCallable + 'static>,
     r#type: FuncType,
+    #[cfg(feature = "interface-types")]
+    pub(crate) bindings: Option<(Rc<it::ModuleData>, String)>,
 }
 
 impl Func {
@@ -132,6 +137,8 @@ impl Func {
             _store: store,
             callable,
             r#type,
+            #[cfg(feature = "interface-types")]
+            bindings: None,
         }
     }
 
@@ -151,6 +158,14 @@ impl Func {
         let mut results = vec![Val::default(); self.result_arity()];
         self.callable.call(params, &mut results)?;
         Ok(results.into_boxed_slice())
+    }
+
+    #[cfg(feature = "interface-types")]
+    pub fn call_typed(&self, params: &[it::Value]) -> Result<Box<[it::Value]>, HostRef<Trap>> {
+        panic!()
+        // let mut results = vec![Val::default(); self.result_arity()];
+        // self.callable.call(params, &mut results)?;
+        // Ok(results.into_boxed_slice())
     }
 
     pub(crate) fn wasmtime_export(&self) -> &wasmtime_runtime::Export {
