@@ -291,7 +291,7 @@ pub(crate) struct Instance {
     module: Rc<Module>,
 
     /// Offsets in the `vmctx` region.
-    offsets: VMOffsets,
+    pub(crate) offsets: VMOffsets,
 
     /// WebAssembly linear memory data.
     memories: BoxedSlice<DefinedMemoryIndex, LinearMemory>,
@@ -542,6 +542,10 @@ impl Instance {
         &mut *self.host_state
     }
 
+    pub(crate) fn host_state_boxed(&mut self) -> &mut Box<dyn Any> {
+        &mut self.host_state
+    }
+
     fn invoke_function(&mut self, index: FuncIndex) -> Result<(), InstantiationError> {
         // TODO: Check that the callee's calling convention matches what we expect.
 
@@ -720,7 +724,7 @@ impl Instance {
 /// A handle holding an `Instance` of a WebAssembly module.
 #[derive(Hash, PartialEq, Eq)]
 pub struct InstanceHandle {
-    instance: *mut Instance,
+    pub(crate) instance: *mut Instance,
 }
 
 impl InstanceHandle {
@@ -872,6 +876,10 @@ impl InstanceHandle {
         Ok(Self { instance })
     }
 
+    pub(crate) fn finished_function(&self, index: DefinedFuncIndex) -> *const VMFunctionBody {
+        unsafe { (*self.instance).finished_functions[index] }
+    }
+
     /// Create a new `InstanceHandle` pointing at the instance
     /// pointed to by the given `VMContext` pointer.
     ///
@@ -959,6 +967,10 @@ impl InstanceHandle {
     /// Return a reference to the custom state attached to this instance.
     pub fn host_state(&mut self) -> &mut dyn Any {
         self.instance_mut().host_state()
+    }
+
+    pub(crate) fn host_state_boxed(&mut self) -> &mut Box<dyn Any> {
+        self.instance_mut().host_state_boxed()
     }
 
     /// Return the memory index for the given `VMMemoryDefinition` in this instance.

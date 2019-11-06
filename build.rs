@@ -20,6 +20,8 @@ fn main() -> anyhow::Result<()> {
         "Cranelift",
         #[cfg(feature = "lightbeam")]
         "Lightbeam",
+        #[cfg(feature = "interpreter")]
+        "Interpreter",
     ] {
         writeln!(out, "#[cfg(test)]")?;
         writeln!(out, "#[allow(non_snake_case)]")?;
@@ -149,6 +151,10 @@ fn ignore(testsuite: &str, testname: &str, strategy: &str) -> bool {
             // Lightbeam doesn't support float arguments on the stack.
             ("spec_testsuite", "call") => return true,
             _ => (),
+        },
+        #[cfg(feature = "interpreter")]
+        "Interpreter" => match (testsuite, testname) {
+            _ => return true,
         },
         "Cranelift" => match (testsuite, testname) {
             ("simd", "simd_bit_shift") => return true, // FIXME Unsupported feature: proposed SIMD operator I8x16Shl

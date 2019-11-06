@@ -137,3 +137,17 @@ pub unsafe extern "C" fn wasmtime_imported_memory32_size(
 
     instance.imported_memory_size(memory_index)
 }
+
+#[cfg(feature = "interpreter")]
+pub use crate::interpreter::wasmtime_eval;
+
+/// Stub for wasmtime_eval.
+#[cfg(not(feature = "interpreter"))]
+#[no_mangle]
+pub unsafe extern "C" fn wasmtime_eval(
+    _vmctx: *mut VMContext,
+    _args: *mut i64,
+    _call_id: u32,
+) -> u32 {
+    panic!("wasmtime_eval is not supported");
+}

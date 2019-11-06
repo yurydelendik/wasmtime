@@ -46,6 +46,11 @@ pub fn get_imported_memory32_size_name() -> ir::ExternalName {
     ir::ExternalName::user(1, 3)
 }
 
+/// Eval???
+pub fn get_eval_name() -> ir::ExternalName {
+    ir::ExternalName::user(1, 4)
+}
+
 /// An index type for builtin functions.
 pub struct BuiltinFunctionIndex(u32);
 
@@ -66,9 +71,14 @@ impl BuiltinFunctionIndex {
     pub const fn get_imported_memory32_size_index() -> Self {
         Self(3)
     }
+    /// Returns an index for eval builtin function.
+    pub const fn get_eval_index() -> Self {
+        Self(4)
+    }
     /// Returns the total number of builtin functions.
     pub const fn builtin_functions_total_number() -> u32 {
-        4
+        //4
+        5
     }
 
     /// Return the index as an u32 number.
@@ -96,6 +106,9 @@ pub struct FuncEnvironment<'module_environment> {
     /// for locally-defined memories.
     memory_grow_sig: Option<ir::SigRef>,
 
+    /// Eval??
+    eval_sig: Option<ir::SigRef>,
+
     /// Offsets to struct fields accessed by JIT code.
     offsets: VMOffsets,
 }
@@ -108,6 +121,7 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
             vmctx: None,
             memory32_size_sig: None,
             memory_grow_sig: None,
+            eval_sig: None,
             offsets: VMOffsets::new(target_config.pointer_bytes(), module),
         }
     }
@@ -177,6 +191,22 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         sig
     }
 
+    fn get_eval_sig(&mut self, func: &mut Function) -> ir::SigRef {
+        let sig = self.eval_sig.unwrap_or_else(|| {
+            func.import_signature(Signature {
+                params: vec![
+                    AbiParam::special(self.pointer_type(), ArgumentPurpose::VMContext),
+                    AbiParam::new(self.pointer_type()),
+                    AbiParam::new(I32),
+                ],
+                returns: vec![AbiParam::new(I32)],
+                call_conv: self.target_config.default_call_conv,
+            })
+        });
+        self.eval_sig = Some(sig);
+        sig
+    }
+
     /// Return the memory.size function signature to call for the given index, along with the
     /// translated index value to pass to it and its index in `VMBuiltinFunctionsArray`.
     fn get_memory_size_func(
@@ -197,6 +227,13 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
                 BuiltinFunctionIndex::get_memory32_size_index(),
             )
         }
+    }
+
+    fn get_eval_func(&mut self, func: &mut Function) -> (ir::SigRef, BuiltinFunctionIndex) {
+        (
+            self.get_eval_sig(func),
+            BuiltinFunctionIndex::get_eval_index(),
+        )
     }
 
     /// Translates load of builtin function and returns a pair of values `vmctx`
@@ -220,6 +257,41 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         let func_addr = pos.ins().load(pointer_type, mem_flags, base, body_offset);
 
         (base, func_addr)
+    }
+
+    pub(crate) fn ins_eval_call(
+        &mut self,
+        mut pos: FuncCursor<'_>,
+        func: FuncIndex,
+        values_vec_ptr_val: ir::Value,
+        data: Vec<u8>,
+    ) -> WasmResult<ir::Value> {
+        {
+            // HACK need to embed and refer a blob:
+            // we cannot create a pointer to constant block yet,
+            // though constants are not optimized out yet too.
+            // Just add "asmF" header and length of block --
+            // we will search for it later.
+            let mut wrapped = vec![
+                b'a',
+                b's',
+                b'm',
+                b'F',
+                data.len() as u8,
+                (data.len() >> 8) as u8,
+                (data.len() >> 16) as u8,
+                (data.len() >> 24) as u8,
+            ];
+            wrapped.extend(data);
+            let _data_handle = pos.func.dfg.constants.insert(wrapped.into());
+        }
+        let (func_sig, func_idx) = self.get_eval_func(&mut pos.func);
+        let index = pos.ins().iconst(I32, func.index() as i64);
+        let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
+        let call_inst =
+            pos.ins()
+                .call_indirect(func_sig, func_addr, &[vmctx, values_vec_ptr_val, index]);
+        Ok(*pos.func.dfg.inst_results(call_inst).first().unwrap())
     }
 }
 

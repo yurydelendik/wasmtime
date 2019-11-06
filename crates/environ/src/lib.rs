@@ -36,6 +36,8 @@ mod vmoffsets;
 mod cache;
 
 pub mod cranelift;
+#[cfg(feature = "interpreter")]
+pub mod interpreter;
 #[cfg(feature = "lightbeam")]
 pub mod lightbeam;
 
@@ -51,6 +53,8 @@ pub use crate::compilation::{
 pub use crate::cranelift::Cranelift;
 pub use crate::data_structures::*;
 pub use crate::func_environ::BuiltinFunctionIndex;
+#[cfg(feature = "interpreter")]
+pub use crate::interpreter::Interpreter;
 #[cfg(feature = "lightbeam")]
 pub use crate::lightbeam::Lightbeam;
 pub use crate::module::{

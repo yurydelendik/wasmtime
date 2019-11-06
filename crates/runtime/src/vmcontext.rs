@@ -545,6 +545,7 @@ impl VMBuiltinFunctionsArray {
             wasmtime_memory32_size as usize;
         ptrs[BuiltinFunctionIndex::get_imported_memory32_size_index().index() as usize] =
             wasmtime_imported_memory32_size as usize;
+        ptrs[BuiltinFunctionIndex::get_eval_index().index() as usize] = wasmtime_eval as usize;
         Self { ptrs }
     }
 }

@@ -35,6 +35,10 @@ mod traphandlers;
 mod vmcontext;
 
 pub mod jit_function_registry;
+
+#[cfg(feature = "interpreter")]
+mod interpreter;
+
 pub mod libcalls;
 
 pub use crate::export::Export;

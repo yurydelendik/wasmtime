@@ -254,6 +254,8 @@ pub enum RelocationTarget {
     Memory32Size,
     /// Function for query current size of an imported 32-bit linear memory.
     ImportedMemory32Size,
+    /// Interpreter??
+    Eval,
     /// Jump table index.
     JumpTable(FuncIndex, ir::JumpTable),
 }

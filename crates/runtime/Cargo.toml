@@ -21,12 +21,17 @@ thiserror = "1.0.4"
 more-asserts = "0.2.1"
 cfg-if = "0.1.9"
 backtrace = "0.3.42"
+wasmeval = { path = "../../../wasmeval", optional = true }
+#wasmeval = { git = "https://github.com/yurydelendik/wasmeval", rev="004978829b3dd6", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3.7", features = ["winbase", "memoryapi"] }
 
 [build-dependencies]
 cc = "1.0"
+
+[features]
+interpreter = ["wasmeval", "wasmtime-environ/interpreter"]
 
 [badges]
 maintenance = { status = "actively-developed" }

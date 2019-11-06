@@ -7,7 +7,7 @@ use crate::compilation::{
     RelocationTarget, TrapInformation,
 };
 use crate::func_environ::{
-    get_func_name, get_imported_memory32_grow_name, get_imported_memory32_size_name,
+    get_eval_name, get_func_name, get_imported_memory32_grow_name, get_imported_memory32_size_name,
     get_memory32_grow_name, get_memory32_size_name, FuncEnvironment,
 };
 use crate::module::Module;
@@ -53,6 +53,8 @@ impl binemit::RelocSink for RelocSink {
             RelocationTarget::Memory32Size
         } else if *name == get_imported_memory32_size_name() {
             RelocationTarget::ImportedMemory32Size
+        } else if *name == get_eval_name() {
+            RelocationTarget::Eval
         } else if let ExternalName::User { namespace, index } = *name {
             debug_assert_eq!(namespace, 0);
             RelocationTarget::UserFunc(FuncIndex::from_u32(index))

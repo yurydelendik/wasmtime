@@ -71,6 +71,12 @@ lightbeam = [
     "wasmtime-wast/lightbeam",
     "wasmtime/lightbeam",
 ]
+interpreter = [
+  "wasmtime-environ/interpreter",
+  "wasmtime-runtime/interpreter",
+  "wasmtime-jit/interpreter",
+  "wasmtime-wast/interpreter"
+]
 wasi-c = ["wasmtime-wasi-c"]
 test_programs = ["test-programs/test_programs"]
 

@@ -36,6 +36,10 @@ pub enum CompilationStrategy {
     /// Compile all functions with Lightbeam.
     #[cfg(feature = "lightbeam")]
     Lightbeam,
+
+    /// Compile all functions with Lightbeam.
+    #[cfg(feature = "interpreter")]
+    Interpreter,
 }
 
 /// A WebAssembly code JIT compiler.
@@ -137,6 +141,16 @@ impl Compiler {
                 #[cfg(feature = "lightbeam")]
                 CompilationStrategy::Lightbeam => {
                     wasmtime_environ::lightbeam::Lightbeam::compile_module(
+                        module,
+                        module_translation,
+                        function_body_inputs,
+                        &*self.isa,
+                        debug_data.is_some(),
+                    )
+                }
+                #[cfg(feature = "interpreter")]
+                CompilationStrategy::Interpreter => {
+                    wasmtime_environ::interpreter::Interpreter::compile_module(
                         module,
                         module_translation,
                         function_body_inputs,
