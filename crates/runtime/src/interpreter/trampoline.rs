@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::code_memory::CodeMemory;
 use crate::{wasmtime_call_trampoline, VMContext, VMFunctionBody, VMInvokeArgument};
 use cranelift_codegen::ir::InstBuilder;
@@ -12,7 +14,7 @@ use wasmtime_environ::CompiledFunction;
 
 use wasmeval::Val;
 
-pub(crate) struct TrampolineError(&'static str);
+pub(crate) struct TrampolineError(pub &'static str);
 
 fn native_isa() -> Box<dyn isa::TargetIsa> {
     let flag_builder = settings::builder();

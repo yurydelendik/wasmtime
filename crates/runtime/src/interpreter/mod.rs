@@ -11,6 +11,7 @@ mod code_memory;
 mod eval;
 mod function_table;
 mod trampoline;
+mod trampoline_sea;
 
 pub(crate) unsafe fn find_body<'a>(ff: *const u8) -> &'a [u8] {
     // HACK Searching for function blob: header b"asmF"

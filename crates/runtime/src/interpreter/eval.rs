@@ -12,7 +12,10 @@ use std::rc::Rc;
 
 use wasmeval::*;
 
-use super::trampoline::{invoke, TrampolineCache};
+//use super::trampoline::{invoke, TrampolineCache};
+use super::trampoline::TrampolineCache;
+use super::trampoline_sea::invoke;
+
 use super::{find_body, read_val, write_val};
 
 struct InterpreterMemory {
