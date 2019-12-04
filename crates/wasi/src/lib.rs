@@ -1,5 +1,6 @@
 #![allow(improper_ctypes)]
 
+pub mod c_api;
 mod instantiate;
 pub mod old;
 mod syscalls;

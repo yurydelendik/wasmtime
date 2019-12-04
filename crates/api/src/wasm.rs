@@ -167,7 +167,7 @@ pub struct wasm_engine_t {
 #[repr(C)]
 #[derive(Clone)]
 pub struct wasm_store_t {
-    store: HostRef<Store>,
+    pub store: HostRef<Store>,
 }
 #[doc = ""]
 pub type wasm_mutability_t = u8;
@@ -256,9 +256,9 @@ declare_vec!(wasm_importtype_vec_t, *mut wasm_importtype_t);
 #[repr(C)]
 #[derive(Clone)]
 pub struct wasm_exporttype_t {
-    ty: ExportType,
-    name_cache: Option<wasm_name_t>,
-    type_cache: Option<wasm_externtype_t>,
+    pub ty: ExportType,
+    pub name_cache: Option<wasm_name_t>,
+    pub type_cache: Option<wasm_externtype_t>,
 }
 
 declare_vec!(wasm_exporttype_vec_t, *mut wasm_exporttype_t);
@@ -311,7 +311,7 @@ declare_vec!(wasm_frame_vec_t, *mut wasm_frame_t);
 #[repr(C)]
 #[derive(Clone)]
 pub struct wasm_instance_t {
-    instance: HostRef<Instance>,
+    pub instance: HostRef<Instance>,
 }
 pub type wasm_message_t = wasm_name_t;
 #[repr(C)]
@@ -324,12 +324,21 @@ pub struct wasm_trap_t {
 pub struct wasm_foreign_t {
     _unused: [u8; 0],
 }
+pub type wasm_instantiate_callback_t = std::option::Option<
+    unsafe extern "C" fn(
+        store: *mut wasm_store_t,
+        module: *const wasm_module_t,
+        imports: *const *const wasm_extern_t,
+        result: *mut *mut wasm_trap_t,
+    ) -> *mut wasm_instance_t,
+>;
 #[repr(C)]
 #[derive(Clone)]
 pub struct wasm_module_t {
-    module: HostRef<Module>,
-    imports: Vec<wasm_importtype_t>,
-    exports: Vec<wasm_exporttype_t>,
+    pub module: HostRef<Module>,
+    pub imports: Vec<wasm_importtype_t>,
+    pub exports: Vec<wasm_exporttype_t>,
+    pub instantiate_callback: wasm_instantiate_callback_t,
 }
 #[repr(C)]
 #[derive(Clone)]
@@ -660,6 +669,10 @@ pub unsafe extern "C" fn wasm_instance_new(
     imports: *const *const wasm_extern_t,
     result: *mut *mut wasm_trap_t,
 ) -> *mut wasm_instance_t {
+    if let Some(callback) = (*module).instantiate_callback {
+        return callback(store, module, imports, result);
+    }
+
     let store = &(*store).store;
     let mut externs: Vec<Extern> = Vec::with_capacity((*module).imports.len());
     for i in 0..(*module).imports.len() {
@@ -754,6 +767,7 @@ pub unsafe extern "C" fn wasm_module_new(
         module: HostRef::new(module),
         imports,
         exports,
+        instantiate_callback: None,
     });
     Box::into_raw(module)
 }

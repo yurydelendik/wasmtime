@@ -193,7 +193,7 @@ impl FuncType {
         &self.signature
     }
 
-    pub(crate) fn from_wasmtime_signature(signature: ir::Signature) -> FuncType {
+    pub fn from_wasmtime_signature(signature: ir::Signature) -> FuncType {
         let params = signature
             .params
             .iter()

@@ -55,6 +55,86 @@ pub fn instantiate_wasi(
     instantiate_wasi_with_context(global_exports, wasi_ctx)
 }
 
+macro_rules! for_each_func {
+    ($m:ident!) => {
+        $m!(args_get);
+        $m!(args_sizes_get);
+        $m!(clock_res_get);
+        $m!(clock_time_get);
+        $m!(environ_get);
+        $m!(environ_sizes_get);
+        $m!(fd_prestat_get);
+        $m!(fd_prestat_dir_name);
+        $m!(fd_close);
+        $m!(fd_datasync);
+        $m!(fd_pread);
+        $m!(fd_pwrite);
+        $m!(fd_read);
+        $m!(fd_renumber);
+        $m!(fd_seek);
+        $m!(fd_tell);
+        $m!(fd_fdstat_get);
+        $m!(fd_fdstat_set_flags);
+        $m!(fd_fdstat_set_rights);
+        $m!(fd_sync);
+        $m!(fd_write);
+        $m!(fd_advise);
+        $m!(fd_allocate);
+        $m!(path_create_directory);
+        $m!(path_link);
+        $m!(path_open);
+        $m!(fd_readdir);
+        $m!(path_readlink);
+        $m!(path_rename);
+        $m!(fd_filestat_get);
+        $m!(fd_filestat_set_times);
+        $m!(fd_filestat_set_size);
+        $m!(path_filestat_get);
+        $m!(path_filestat_set_times);
+        $m!(path_symlink);
+        $m!(path_unlink_file);
+        $m!(path_remove_directory);
+        $m!(poll_oneoff);
+        $m!(proc_exit);
+        $m!(proc_raise);
+        $m!(random_get);
+        $m!(sched_yield);
+        $m!(sock_recv);
+        $m!(sock_send);
+        $m!(sock_shutdown);
+    };
+}
+
+pub(crate) fn get_exports() -> Vec<(String, ir::Signature)> {
+    let pointer_type = types::Type::triple_pointer_type(&HOST);
+    let call_conv = isa::CallConv::triple_default(&HOST);
+    let mut exports = Vec::new();
+
+    macro_rules! export {
+        ($name:ident) => {{
+            let sig = translate_signature(
+                ir::Signature {
+                    params: syscalls::$name::params()
+                        .into_iter()
+                        .map(ir::AbiParam::new)
+                        .collect(),
+                    returns: syscalls::$name::results()
+                        .into_iter()
+                        .map(ir::AbiParam::new)
+                        .collect(),
+                    call_conv,
+                },
+                pointer_type,
+            );
+            exports.push((stringify!($name).to_owned(), sig));
+        }};
+    }
+
+    for_each_func!(export!);
+
+    exports
+}
+
 /// Return an instance implementing the "wasi" interface.
 ///
 /// The wasi context is configured by
@@ -92,51 +172,7 @@ pub fn instantiate_wasi_with_context(
         }};
     }
 
-    signature!(args_get);
-    signature!(args_sizes_get);
-    signature!(clock_res_get);
-    signature!(clock_time_get);
-    signature!(environ_get);
-    signature!(environ_sizes_get);
-    signature!(fd_prestat_get);
-    signature!(fd_prestat_dir_name);
-    signature!(fd_close);
-    signature!(fd_datasync);
-    signature!(fd_pread);
-    signature!(fd_pwrite);
-    signature!(fd_read);
-    signature!(fd_renumber);
-    signature!(fd_seek);
-    signature!(fd_tell);
-    signature!(fd_fdstat_get);
-    signature!(fd_fdstat_set_flags);
-    signature!(fd_fdstat_set_rights);
-    signature!(fd_sync);
-    signature!(fd_write);
-    signature!(fd_advise);
-    signature!(fd_allocate);
-    signature!(path_create_directory);
-    signature!(path_link);
-    signature!(path_open);
-    signature!(fd_readdir);
-    signature!(path_readlink);
-    signature!(path_rename);
-    signature!(fd_filestat_get);
-    signature!(fd_filestat_set_times);
-    signature!(fd_filestat_set_size);
-    signature!(path_filestat_get);
-    signature!(path_filestat_set_times);
-    signature!(path_symlink);
-    signature!(path_unlink_file);
-    signature!(path_remove_directory);
-    signature!(poll_oneoff);
-    signature!(proc_exit);
-    signature!(proc_raise);
-    signature!(random_get);
-    signature!(sched_yield);
-    signature!(sock_recv);
-    signature!(sock_send);
-    signature!(sock_shutdown);
+    for_each_func!(signature!);
 
     let imports = Imports::none();
     let data_initializers = Vec::new();

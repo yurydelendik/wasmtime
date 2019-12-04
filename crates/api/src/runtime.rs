@@ -139,7 +139,7 @@ impl Store {
         &self.global_exports
     }
 
-    pub(crate) fn register_wasmtime_signature(
+    pub fn register_wasmtime_signature(
         &mut self,
         signature: &ir::Signature,
     ) -> wasmtime_runtime::VMSharedSignatureIndex {
