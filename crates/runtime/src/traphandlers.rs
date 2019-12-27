@@ -36,11 +36,33 @@ pub extern "C" fn CheckIfTrapAtAddress(_pc: *const u8) -> i8 {
     JMP_BUF.with(|ptr| !ptr.get().is_null()) as i8
 }
 
+#[doc(hidden)]
+#[no_mangle]
+extern "C" fn dump_stack() {
+    use backtrace::trace;
+    use winapi::um::winnt::RtlCaptureStackBackTrace;
+
+    // Using RtlCaptureStackBackTrace
+    let mut a: Box<[*mut core::ffi::c_void]> = Box::new([std::ptr::null_mut(); 30]);
+    let r = unsafe { RtlCaptureStackBackTrace(0, 30, a.as_mut_ptr(), std::ptr::null_mut()) };
+    eprintln!("RtlCaptureStackBackTrace: {:x?} {}", a, r);
+
+    // Using StackWalk(Ex|64) via backtrace crate
+    eprint!("trace/StackWalk:");
+    trace(|f| {
+        eprint!(" {:x?}", f.ip());
+        true
+    });
+    eprintln!();
+}
+
 /// Record the Trap code and wasm bytecode offset in TLS somewhere
 #[doc(hidden)]
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn RecordTrap(pc: *const u8, reset_guard_page: bool) {
+    dump_stack();
+
     // TODO: please see explanation in CheckIfTrapAtAddress.
     let registry = get_trap_registry();
     let trap_desc = registry

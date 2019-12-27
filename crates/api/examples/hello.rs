@@ -10,7 +10,8 @@ impl Callable for HelloCallback {
     fn call(&self, _params: &[Val], _results: &mut [Val]) -> Result<(), HostRef<Trap>> {
         println!("Calling back...");
         println!("> Hello World!");
-        Ok(())
+        //Ok(())
+        Err(HostRef::new(Trap::new("trap")))
     }
 }
 
