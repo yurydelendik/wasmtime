@@ -36,11 +36,58 @@ pub extern "C" fn CheckIfTrapAtAddress(_pc: *const u8) -> i8 {
     JMP_BUF.with(|ptr| !ptr.get().is_null()) as i8
 }
 
+fn capture_stack<F>(f: F)
+where
+    F: Fn(u64),
+{
+    use std::mem;
+    use winapi::um::winnt::{
+        RtlCaptureContext, RtlLookupFunctionEntry, RtlVirtualUnwind, CONTEXT, UNWIND_HISTORY_TABLE,
+        UNW_FLAG_NHANDLER,
+    };
+
+    unsafe {
+        let mut ctx = Box::new(mem::uninitialized::<CONTEXT>());
+        RtlCaptureContext(ctx.as_mut());
+        let mut unwind_history_table = Box::new(mem::zeroed::<UNWIND_HISTORY_TABLE>());
+        while ctx.Rip != 0 {
+            f(ctx.Rip);
+
+            let mut image_base: u64 = 0;
+            let mut handler_data: *mut core::ffi::c_void = ptr::null_mut();
+            let mut establisher_frame: u64 = 0;
+            let rf =
+                RtlLookupFunctionEntry(ctx.Rip, &mut image_base, unwind_history_table.as_mut());
+            if rf.is_null() {
+                ctx.Rip = ptr::read(ctx.Rsp as *const u64);
+                ctx.Rsp += 8;
+            } else {
+                RtlVirtualUnwind(
+                    UNW_FLAG_NHANDLER,
+                    image_base,
+                    ctx.Rip,
+                    rf,
+                    ctx.as_mut(),
+                    &mut handler_data,
+                    &mut establisher_frame,
+                    ptr::null_mut(),
+                );
+            }
+        }
+    }
+}
+
 #[doc(hidden)]
 #[no_mangle]
 extern "C" fn dump_stack() {
     use backtrace::trace;
     use winapi::um::winnt::RtlCaptureStackBackTrace;
+
+    eprint!("RtlVirtualUnwind:");
+    capture_stack(|a| {
+        eprint!(" {:x}", a);
+    });
+    eprintln!();
 
     // Using RtlCaptureStackBackTrace
     let mut a: Box<[*mut core::ffi::c_void]> = Box::new([std::ptr::null_mut(); 30]);
