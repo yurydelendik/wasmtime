@@ -3,14 +3,15 @@
 use super::code_memory::CodeMemory;
 use crate::{wasmtime_call_trampoline, VMContext, VMFunctionBody, VMInvokeArgument};
 use cranelift_codegen::ir::InstBuilder;
-use cranelift_codegen::isa::TargetIsa;
-use cranelift_codegen::{binemit, ir, isa, settings, Context};
+use cranelift_codegen::{binemit, ir, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::mem;
 use std::ptr;
-use wasmtime_environ::CompiledFunction;
+use wasmtime_environ::isa;
+use wasmtime_environ::isa::TargetIsa;
+use wasmtime_environ::{CompiledFunction, CompiledFunctionUnwindInfo};
 
 use wasmeval::Val;
 
@@ -121,6 +122,7 @@ pub(crate) fn invoke(
     if let Err(_message) = unsafe {
         wasmtime_call_trampoline(
             callee_vmctx,
+            ptr::null_mut(),
             exec_code_buf,
             values_vec.as_mut_ptr() as *mut u8,
         )
@@ -232,7 +234,6 @@ fn make_trampoline(
     }
 
     let mut code_buf = Vec::new();
-    let mut unwind_info = Vec::new();
     let mut reloc_sink = RelocSink {};
     let mut trap_sink = binemit::NullTrapSink {};
     let mut stackmap_sink = binemit::NullStackmapSink {};
@@ -246,7 +247,7 @@ fn make_trampoline(
         )
         .map_err(|_error| TrampolineError("compile_and_emit"))?;
 
-    context.emit_unwind_info(isa, &mut unwind_info);
+    let unwind_info = CompiledFunctionUnwindInfo::new(isa, &context);
 
     Ok(code_memory
         .allocate_for_function(&CompiledFunction {

@@ -40,3 +40,4 @@ maintenance = { status = "actively-developed" }
 # to cranelift. Requires Nightly Rust currently, and this is not enabled by
 # default.
 lightbeam = ["wasmtime-jit/lightbeam"]
+interpreter = ["wasmtime-runtime/interpreter"]

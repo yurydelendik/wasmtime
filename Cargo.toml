@@ -75,7 +75,8 @@ interpreter = [
   "wasmtime-environ/interpreter",
   "wasmtime-runtime/interpreter",
   "wasmtime-jit/interpreter",
-  "wasmtime-wast/interpreter"
+  "wasmtime-wast/interpreter",
+  "wasmtime/interpreter",
 ]
 wasi-c = ["wasmtime-wasi-c"]
 test_programs = ["test-programs/test_programs"]

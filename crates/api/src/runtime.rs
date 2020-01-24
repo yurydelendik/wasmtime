@@ -177,6 +177,12 @@ impl Config {
             Strategy::Lightbeam => {
                 anyhow::bail!("lightbeam compilation strategy wasn't enabled at compile time");
             }
+            #[cfg(feature = "interpreter")]
+            Strategy::Interpreter => CompilationStrategy::Interpreter,
+            #[cfg(not(feature = "interpreter"))]
+            Strategy::Interpreter => {
+                anyhow::bail!("interpreter strategy wasn't enabled at compile time");
+            }
         };
         Ok(self)
     }
@@ -250,6 +256,12 @@ pub enum Strategy {
     /// To successfully pass this argument to [`Config::strategy`] the
     /// `lightbeam` feature of this crate must be enabled.
     Lightbeam,
+
+    /// Interpreter.
+    ///
+    /// To successfully pass this argument to [`Config::strategy`] the
+    /// `interpreter` feature of this crate must be enabled.
+    Interpreter,
 }
 
 /// Possible optimization levels for the Cranelift codegen backend.

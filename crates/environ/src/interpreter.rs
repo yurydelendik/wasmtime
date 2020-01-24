@@ -1,6 +1,8 @@
 //! Support for compiling with Lightbeam.
 
-use crate::compilation::{Compilation, CompileError, CompiledFunction, Relocations, Traps};
+use crate::compilation::{
+    Compilation, CompileError, CompiledFunction, CompiledFunctionUnwindInfo, Relocations, Traps,
+};
 use crate::func_environ::FuncEnvironment;
 use crate::module::Module;
 use crate::module_environ::FunctionBodyData;
@@ -141,7 +143,7 @@ impl crate::compilation::Compiler for Interpreter {
             let function = CompiledFunction {
                 body: trampoline,
                 jt_offsets: SecondaryMap::new(),
-                unwind_info: vec![],
+                unwind_info: CompiledFunctionUnwindInfo::None,
             };
             functions.push(function);
         }

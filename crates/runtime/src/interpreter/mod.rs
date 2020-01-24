@@ -1,9 +1,9 @@
 use crate::instance::InstanceHandle;
 use crate::vmcontext::VMContext;
-use cranelift_codegen::ir;
-use cranelift_wasm::FuncIndex;
 use eval::Ctx;
 use std::ptr;
+use wasmtime_environ::ir;
+use wasmtime_environ::wasm::FuncIndex;
 
 use wasmeval::*;
 
@@ -68,8 +68,8 @@ pub unsafe extern "C" fn wasmtime_eval(vmctx: *mut VMContext, args: *mut i64, ca
 
     let body = find_body(ff);
 
-    let mut params = Vec::with_capacity(sig.params.len() - 1);
-    for index in 1..sig.params.len() {
+    let mut params = Vec::with_capacity(sig.params.len() - 2);
+    for index in 2..sig.params.len() {
         let ptr = args.add(index - 1);
         params.push(read_val(ptr as *const u8, &sig.params[index].value_type));
     }

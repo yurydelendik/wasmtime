@@ -133,6 +133,7 @@ impl RunCommand {
             .strategy(pick_compilation_strategy(
                 self.common.cranelift,
                 self.common.lightbeam,
+                self.common.interpreter,
             )?)?;
 
         if self.common.optimize {
@@ -315,7 +316,11 @@ impl RunCommand {
         for ty in binding.param_types()? {
             let val = match args.next() {
                 Some(s) => s,
-                None => bail!("not enough arguments for `{}`", name),
+                None => bail!(
+                    "not enough arguments for `{}` {:?}",
+                    name,
+                    binding.param_types()
+                ),
             };
             values.push(match ty {
                 // TODO: integer parsing here should handle hexadecimal notation

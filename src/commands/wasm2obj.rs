@@ -87,7 +87,11 @@ impl WasmToObjCommand {
     }
 
     fn handle_module(&self) -> Result<()> {
-        let strategy = pick_compilation_strategy(self.common.cranelift, self.common.lightbeam)?;
+        let strategy = pick_compilation_strategy(
+            self.common.cranelift,
+            self.common.lightbeam,
+            self.common.interpreter,
+        )?;
 
         let data = wat::parse_file(&self.module).context("failed to parse module")?;
 

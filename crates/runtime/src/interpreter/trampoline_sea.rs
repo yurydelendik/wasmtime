@@ -1,11 +1,11 @@
 use super::trampoline::{TrampolineCache, TrampolineError};
 use crate::{wasmtime_call_trampoline, VMContext, VMFunctionBody, VMInvokeArgument};
-use cranelift_codegen::{ir, isa};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::ptr;
 use target_lexicon::HOST;
 use wasmeval::Val;
+use wasmtime_environ::{ir, isa};
 
 macro_rules! wrapper_function {
     (fn (ctx, $($a:ident),*) -> $r:ident) => {{
@@ -127,6 +127,7 @@ pub(crate) fn invoke(
     if let Err(_message) = unsafe {
         wasmtime_call_trampoline(
             callee_vmctx,
+            ptr::null_mut(),
             exec_code_buf,
             values_vec.as_mut_ptr() as *mut u8,
         )

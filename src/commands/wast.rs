@@ -59,6 +59,7 @@ impl WastCommand {
             .strategy(pick_compilation_strategy(
                 self.common.cranelift,
                 self.common.lightbeam,
+                self.common.interpreter,
             )?)?;
 
         if self.common.optimize {

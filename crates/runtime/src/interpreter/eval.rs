@@ -4,11 +4,11 @@ use crate::instance::InstanceHandle;
 use crate::vmcontext::{
     VMContext, VMFunctionBody, VMFunctionImport, VMGlobalDefinition, VMMemoryDefinition,
 };
-use cranelift_codegen::ir;
-use cranelift_wasm::{DefinedTableIndex, FuncIndex, SignatureIndex};
 use std::cell::{Ref, RefCell};
 use std::convert::TryFrom;
 use std::rc::Rc;
+use wasmtime_environ::ir;
+use wasmtime_environ::wasm::{DefinedTableIndex, FuncIndex, SignatureIndex};
 
 use wasmeval::*;
 

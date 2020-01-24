@@ -31,12 +31,17 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use wasmtime::Strategy;
 
-fn pick_compilation_strategy(cranelift: bool, lightbeam: bool) -> Result<Strategy> {
-    Ok(match (lightbeam, cranelift) {
-        (true, false) => Strategy::Lightbeam,
-        (false, true) => Strategy::Cranelift,
-        (false, false) => Strategy::Auto,
-        (true, true) => bail!("Can't enable --cranelift and --lightbeam at the same time"),
+fn pick_compilation_strategy(
+    cranelift: bool,
+    lightbeam: bool,
+    interpreter: bool,
+) -> Result<Strategy> {
+    Ok(match (lightbeam, cranelift, interpreter) {
+        (true, false, false) => Strategy::Lightbeam,
+        (false, true, false) => Strategy::Cranelift,
+        (false, false, true) => Strategy::Interpreter,
+        (false, false, false) => Strategy::Auto,
+        _ => bail!("Can't enable more than one of --cranelift, --interpreter, or --lightbeam at the same time"),
     })
 }
 
@@ -74,7 +79,7 @@ struct CommonOptions {
     config: Option<PathBuf>,
 
     /// Use Cranelift for all compilation
-    #[structopt(long, conflicts_with = "lightbeam")]
+    #[structopt(long, conflicts_with = "lightbeam", conflicts_with = "interpreter")]
     cranelift: bool,
 
     /// Enable debug output
@@ -94,8 +99,12 @@ struct CommonOptions {
     enable_simd: bool,
 
     /// Use Lightbeam for all compilation
-    #[structopt(long, conflicts_with = "cranelift")]
+    #[structopt(long, conflicts_with = "cranelift", conflicts_with = "interpreter")]
     lightbeam: bool,
+
+    /// Use interpreter
+    #[structopt(long, conflicts_with = "cranelift", conflicts_with = "lightbeam")]
+    interpreter: bool,
 
     /// Run optimization passes on translated functions
     #[structopt(short = "O", long)]
