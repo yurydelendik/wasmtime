@@ -917,6 +917,7 @@ impl InstanceHandle {
             }
         };
         let instance = handle.instance();
+        println!("{:x?}", instance.vmctx_ptr());
 
         ptr::copy(
             vmshared_signatures.values().as_slice().as_ptr(),

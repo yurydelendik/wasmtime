@@ -29,6 +29,29 @@ impl Trap {
     /// assert_eq!("unexpected error", trap.message());
     /// ```
     pub fn new<I: Into<String>>(message: I) -> Self {
+        use wasmtime_jit::VmctxLocation;
+        backtrace::trace(|f| {
+            let pc = f.ip() as usize;
+            let fi = if let Some(fi) = FRAME_INFO.lookup(pc) { fi } else { return true; };
+            let vmctx_locations = if let Some(l) = fi.vmctx_locations { l } else { return true; };
+            let off = pc - fi.func_start;
+            const RBP: u32 = 6;
+            let vmctx = match vmctx_locations.find(off as u32) {
+                Some(VmctxLocation::FrameOffset(off)) => {
+                    match f.gr(RBP) {
+                        Some(rbp) => {
+                            let t = (rbp + 16).wrapping_add(*off as usize) as *const usize;
+                            Some(unsafe { std::ptr::read(t) })
+                        }
+                        None => None,
+                    }
+                },
+                Some(VmctxLocation::Register(r)) => f.gr(*r as u32),
+                None => None,
+            };
+            println!("@{:x} {:x?}", pc, vmctx);
+            true
+        });
         Trap::new_with_trace(message.into(), Backtrace::new_unresolved())
     }
 

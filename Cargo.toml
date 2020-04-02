@@ -78,3 +78,6 @@ jitdump = ["wasmtime/jitdump"]
 
 [badges]
 maintenance = { status = "actively-developed" }
+
+[patch.crates-io]
+backtrace = { path = "/Users/yury/Work/junk/backtrace-rs", version = "0.3.46" }

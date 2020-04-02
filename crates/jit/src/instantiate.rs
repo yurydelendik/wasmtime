@@ -3,7 +3,7 @@
 //! `CompiledModule` to allow compiling and instantiating to be done as separate
 //! steps.
 
-use crate::compiler::Compiler;
+use crate::compiler::{Compiler, VmctxLocationRanges};
 use crate::imports::resolve_imports;
 use crate::link::link_module;
 use crate::resolver::Resolver;
@@ -56,6 +56,7 @@ struct RawCompiledModule<'data> {
     signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     dbg_jit_registration: Option<GdbJitImageRegistration>,
     trap_registration: TrapRegistration,
+    vmctx_locations: BoxedSlice<DefinedFuncIndex, VmctxLocationRanges>,
 }
 
 impl<'data> RawCompiledModule<'data> {
@@ -128,6 +129,7 @@ impl<'data> RawCompiledModule<'data> {
             signatures: signatures.into_boxed_slice(),
             dbg_jit_registration,
             trap_registration: compilation.trap_registration,
+            vmctx_locations: compilation.vmctx_locations.into_boxed_slice(),
         })
     }
 }
@@ -141,6 +143,7 @@ pub struct CompiledModule {
     signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     dbg_jit_registration: Option<Rc<GdbJitImageRegistration>>,
     trap_registration: TrapRegistration,
+    vmctx_locations: BoxedSlice<DefinedFuncIndex, VmctxLocationRanges>,
 }
 
 impl CompiledModule {
@@ -165,6 +168,7 @@ impl CompiledModule {
             raw.signatures.clone(),
             raw.dbg_jit_registration,
             raw.trap_registration,
+            raw.vmctx_locations,
         ))
     }
 
@@ -177,6 +181,7 @@ impl CompiledModule {
         signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
         dbg_jit_registration: Option<GdbJitImageRegistration>,
         trap_registration: TrapRegistration,
+        vmctx_locations: BoxedSlice<DefinedFuncIndex, VmctxLocationRanges>,
     ) -> Self {
         Self {
             module: Arc::new(module),
@@ -186,6 +191,7 @@ impl CompiledModule {
             signatures,
             dbg_jit_registration: dbg_jit_registration.map(Rc::new),
             trap_registration,
+            vmctx_locations,
         }
     }
 
@@ -240,6 +246,11 @@ impl CompiledModule {
     /// Return a reference to a module.
     pub fn module_ref(&self) -> &Module {
         &self.module
+    }
+
+    /// TDB
+    pub fn vmctx_locations(&self) -> BoxedSlice<DefinedFuncIndex, VmctxLocationRanges> {
+        self.vmctx_locations.clone()
     }
 
     /// Returns the map of all finished JIT functions compiled for this module

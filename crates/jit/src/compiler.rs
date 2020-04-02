@@ -17,6 +17,7 @@ use wasmtime_environ::entity::{EntityRef, PrimaryMap};
 use wasmtime_environ::isa::{TargetFrontendConfig, TargetIsa};
 use wasmtime_environ::wasm::{DefinedFuncIndex, DefinedMemoryIndex, MemoryIndex};
 use wasmtime_environ::RelocationTarget;
+use wasmtime_environ::ir::{StackSlots, ValueLoc, ValueLabelsRanges};
 use wasmtime_environ::{
     CacheConfig, CompileError, CompiledFunction, CompiledFunctionUnwindInfo, Compiler as _C,
     FunctionBodyData, Module, ModuleMemoryOffset, ModuleVmctxInfo, Relocation, Relocations, Traps,
@@ -78,6 +79,56 @@ impl Compiler {
 }
 
 #[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub enum VmctxLocation {
+    Register(u16),
+    FrameOffset(i32),
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct VmctxLocationRanges {
+    ranges: Vec<(u32, u32, VmctxLocation)>,
+}
+
+#[allow(missing_docs)]
+impl VmctxLocationRanges {
+    pub fn find(&self, off: u32) -> Option<&VmctxLocation> {
+        self.ranges.iter().find(|i| i.0 <= off && off < i.1).map(|i| &i.2)
+    }
+}
+
+fn map_vmctx_locations(isa: &dyn TargetIsa, value_ranges: &PrimaryMap<DefinedFuncIndex, ValueLabelsRanges>, stack_slots: &PrimaryMap<DefinedFuncIndex, StackSlots>) -> PrimaryMap<DefinedFuncIndex, VmctxLocationRanges> {
+    use wasmtime_environ::wasm::get_vmctx_value_label;
+    use wasmtime_environ::isa::fde::map_reg;
+    let vmctx_label = get_vmctx_value_label();
+    let mut result = PrimaryMap::new();
+    for (i, r) in value_ranges {
+        let mut ranges = Vec::new();
+        if let Some(vmctx_ranges) = r.get(&vmctx_label) {
+            for range in vmctx_ranges {
+                match range.loc {
+                    ValueLoc::Stack(ss) => {
+                        let offset = stack_slots[i][ss].offset.unwrap();
+                        ranges.push((range.start, range.end, VmctxLocation::FrameOffset(offset)));
+                    }
+                    ValueLoc::Reg(reg) => {
+                        let reg = match map_reg(isa, reg) {
+                            Ok(r) => r.0,
+                            Err(_) => { continue; }
+                        };
+                        ranges.push((range.start, range.end, VmctxLocation::Register(reg)));
+                    }
+                    _ => (),
+                }
+            }
+        }
+        result.push(VmctxLocationRanges { ranges });
+    }
+    result
+}
+
+#[allow(missing_docs)]
 pub struct Compilation {
     pub finished_functions: PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
     pub relocations: Relocations,
@@ -86,6 +137,7 @@ pub struct Compilation {
     pub jt_offsets: PrimaryMap<DefinedFuncIndex, ir::JumpTableOffsets>,
     pub dbg_image: Option<Vec<u8>>,
     pub trap_registration: TrapRegistration,
+    pub vmctx_locations: PrimaryMap<DefinedFuncIndex, VmctxLocationRanges>,
 }
 
 impl Compiler {
@@ -187,6 +239,8 @@ impl Compiler {
             }
         }
 
+        let vmctx_locations = map_vmctx_locations(&*self.isa, &value_ranges, &stack_slots);        
+
         // Translate debug info (DWARF) only if at least one function is present.
         let dbg_image = if debug_data.is_some() && !finished_functions.is_empty() {
             let target_config = self.isa.frontend_config();
@@ -237,6 +291,7 @@ impl Compiler {
             jt_offsets,
             dbg_image,
             trap_registration,
+            vmctx_locations,
         })
     }
 

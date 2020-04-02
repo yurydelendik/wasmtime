@@ -1,4 +1,4 @@
 (module
   (func $hello (import "" "hello"))
-  (func (export "run") (call $hello))
+  (func (export "run") (call $hello) (call $hello) (call $hello))
 )

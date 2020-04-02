@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
-use wasmtime_environ::entity::EntityRef;
-use wasmtime_environ::wasm::FuncIndex;
+use wasmtime_environ::entity::{EntityRef, BoxedSlice};
+use wasmtime_environ::wasm::{FuncIndex, DefinedFuncIndex};
 use wasmtime_environ::Module;
-use wasmtime_jit::CompiledModule;
+use wasmtime_jit::{CompiledModule, VmctxLocationRanges};
 
 lazy_static::lazy_static! {
     /// This is a global cache of backtrace frame information for all active
@@ -40,6 +40,7 @@ struct ModuleFrameInfo {
     start: usize,
     functions: BTreeMap<usize, (usize, FuncIndex)>,
     module: Arc<Module>,
+    vmctx_locations: BoxedSlice<DefinedFuncIndex, VmctxLocationRanges>,
 }
 
 impl GlobalFrameInfo {
@@ -89,6 +90,7 @@ impl GlobalFrameInfo {
                 start: min,
                 functions,
                 module: module.module().clone(),
+                vmctx_locations: module.vmctx_locations(),
             },
         );
         assert!(prev.is_none());
@@ -109,10 +111,13 @@ impl GlobalFrameInfo {
         if pc < *start || *end < pc {
             return None;
         }
+        let i = info.module.local.defined_func_index(*func_index)?;
         Some(FrameInfo {
             module_name: info.module.name.clone(),
             func_index: func_index.index() as u32,
             func_name: info.module.func_names.get(func_index).cloned(),
+            func_start: *start,
+            vmctx_locations: info.vmctx_locations.get(i).cloned(),
         })
     }
 }
@@ -137,6 +142,10 @@ pub struct FrameInfo {
     module_name: Option<String>,
     func_index: u32,
     func_name: Option<String>,
+    /// HACK
+    pub func_start: usize,
+    /// HACK
+    pub vmctx_locations: Option<VmctxLocationRanges>,
 }
 
 impl FrameInfo {

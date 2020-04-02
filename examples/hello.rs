@@ -11,7 +11,8 @@ fn main() -> Result<()> {
     // `Store` structure. Note that you can also tweak configuration settings
     // with a `Config` and an `Engine` if desired.
     println!("Initializing...");
-    let store = Store::default();
+    let engine = Engine::new(Config::new().debug_info(true).cranelift_opt_level(OptLevel::None));
+    let store = Store::new(&engine);
 
     // Compile the wasm binary into an in-memory instance of a `Module`.
     println!("Compiling module...");
@@ -20,9 +21,10 @@ fn main() -> Result<()> {
     // Here we handle the imports of the module, which in this case is our
     // `HelloCallback` type and its associated implementation of `Callback.
     println!("Creating callback...");
-    let hello_func = Func::wrap(&store, || {
+    let hello_func = Func::wrap(&store, || -> Result<(), Trap> {
         println!("Calling back...");
         println!("> Hello World!");
+        Err(Trap::new("hi"))
     });
 
     // Once we've got that all set up we can then move to the instantiation

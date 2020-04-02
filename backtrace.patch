@@ -1,0 +1,58 @@
+diff --git a/crates/backtrace-sys/src/libbacktrace b/crates/backtrace-sys/src/libbacktrace
+index d27b870..f4d02bb 160000
+--- a/crates/backtrace-sys/src/libbacktrace
++++ b/crates/backtrace-sys/src/libbacktrace
+@@ -1 +1 @@
+-Subproject commit d27b870a4adc8c47989f16de9da8c4aff4ae9d72
++Subproject commit f4d02bbdbf8a2c5a31f0801dfef597a86caad9e3
+diff --git a/src/backtrace/libunwind.rs b/src/backtrace/libunwind.rs
+index 21af00c..22fb505 100644
+--- a/src/backtrace/libunwind.rs
++++ b/src/backtrace/libunwind.rs
+@@ -51,6 +51,16 @@ impl Frame {
+         unsafe { uw::_Unwind_GetIP(ctx) as *mut c_void }
+     }
+ 
++    pub fn gr(&self, index: u32) -> Option<usize> {
++        let ctx = match *self {
++            Frame::Raw(ctx) => ctx,
++            Frame::Cloned { .. } => {
++                return None;
++            }
++        };
++        Some(unsafe { uw::_Unwind_GetGR(ctx, index) as usize })
++    }
++
+     pub fn symbol_address(&self) -> *mut c_void {
+         if let Frame::Cloned { symbol_address, .. } = *self {
+             return symbol_address;
+@@ -154,6 +164,13 @@ mod uw {
+         ))]
+         pub fn _Unwind_GetIP(ctx: *mut _Unwind_Context) -> libc::uintptr_t;
+ 
++        #[cfg(all(
++            not(all(target_os = "android", target_arch = "arm")),
++            not(all(target_os = "freebsd", target_arch = "arm")),
++            not(all(target_os = "linux", target_arch = "arm"))
++        ))]
++        pub fn _Unwind_GetGR(ctx: *mut _Unwind_Context, index: u32) -> libc::size_t;
++        
+         #[cfg(all(
+             not(target_os = "android"),
+             not(all(target_os = "freebsd", target_arch = "arm")),
+diff --git a/src/backtrace/mod.rs b/src/backtrace/mod.rs
+index 204974e..0c27f70 100644
+--- a/src/backtrace/mod.rs
++++ b/src/backtrace/mod.rs
+@@ -90,6 +90,11 @@ impl Frame {
+         self.inner.ip()
+     }
+ 
++    /// GR
++    pub fn gr(&self, index: u32) -> Option<usize> {
++        self.inner.gr(index)
++    }
++    
+     /// Returns the starting symbol address of the frame of this function.
+     ///
+     /// This will attempt to rewind the instruction pointer returned by `ip` to
