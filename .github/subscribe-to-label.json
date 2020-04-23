@@ -1,6 +1,0 @@
-{
-  "bnjbvr": ["cranelift"],
-  "fitzgen": ["fuzzing"],
-  "peterhuene": ["wasmtime:api", "wasmtime:c-api"],
-  "kubkon": ["wasi"]
-}
