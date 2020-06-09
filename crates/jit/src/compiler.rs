@@ -107,33 +107,10 @@ fn transform_dwarf_data(
     .map_err(SetupError::DebugInfo)
 }
 
-fn get_code_range(
-    compilation: &wasmtime_environ::Compilation,
-    finished_functions: &PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
-) -> (*const u8, usize) {
-    if finished_functions.is_empty() {
-        return (::std::ptr::null(), 0);
-    }
-    // Assuming all functions in the same code block, looking min/max of its range.
-    let (start, end) = finished_functions.iter().fold::<(usize, usize), _>(
-        (!0, 0),
-        |(start, end), (i, body_ptr)| {
-            let body_ptr = (*body_ptr) as *const u8 as usize;
-            let body_len = compilation.get(i).body.len();
-            (
-                ::std::cmp::min(start, body_ptr),
-                ::std::cmp::max(end, body_ptr + body_len),
-            )
-        },
-    );
-    (start as *const u8, end - start)
-}
-
 #[allow(missing_docs)]
 pub struct Compilation {
     pub code_memory: CodeMemory,
     pub finished_functions: PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
-    pub code_range: (*const u8, usize),
     pub trampolines: PrimaryMap<SignatureIndex, VMTrampoline>,
     pub jt_offsets: PrimaryMap<DefinedFuncIndex, ir::JumpTableOffsets>,
     pub dwarf_sections: Vec<DwarfSection>,
@@ -237,12 +214,10 @@ impl Compiler {
         }
 
         let jt_offsets = compilation.get_jt_offsets();
-        let code_range = get_code_range(&compilation, &finished_functions);
 
         Ok(Compilation {
             code_memory,
             finished_functions,
-            code_range,
             trampolines,
             jt_offsets,
             dwarf_sections,

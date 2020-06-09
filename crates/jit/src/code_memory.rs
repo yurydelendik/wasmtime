@@ -16,6 +16,7 @@ struct CodeMemoryEntry {
     mmap: ManuallyDrop<Mmap>,
     registry: ManuallyDrop<UnwindRegistry>,
     relocs: CodeMemoryRelocations,
+    len: usize,
 }
 
 impl CodeMemoryEntry {
@@ -26,12 +27,13 @@ impl CodeMemoryEntry {
             mmap,
             registry,
             relocs: vec![],
+            len: 0,
         })
     }
 
     fn range(&self) -> (usize, usize) {
         let start = self.mmap.as_ptr() as usize;
-        let end = start + self.mmap.len();
+        let end = start + self.len;
         (start, end)
     }
 }
@@ -50,7 +52,6 @@ impl Drop for CodeMemoryEntry {
 pub struct CodeMemory {
     current: Option<CodeMemoryEntry>,
     entries: Vec<CodeMemoryEntry>,
-    position: usize,
     published: usize,
 }
 
@@ -65,7 +66,6 @@ impl CodeMemory {
         Self {
             current: None,
             entries: Vec::new(),
-            position: 0,
             published: 0,
         }
     }
@@ -126,6 +126,7 @@ impl CodeMemory {
             mmap: m,
             registry: r,
             relocs,
+            ..
         } in &mut self.entries[self.published..]
         {
             // Remove write access to the pages due to the relocation fixups.
@@ -174,19 +175,18 @@ impl CodeMemory {
         assert!(size > 0);
 
         if match &self.current {
-            Some(e) => e.mmap.len() - self.position < size,
+            Some(e) => e.mmap.len() - e.len < size,
             None => true,
         } {
             self.push_current(cmp::max(0x10000, size))?;
         }
 
-        let old_position = self.position;
-        self.position += size;
-
         let e = self.current.as_mut().unwrap();
+        let old_position = e.len;
+        e.len += size;
 
         Ok((
-            &mut e.mmap.as_mut_slice()[old_position..self.position],
+            &mut e.mmap.as_mut_slice()[old_position..e.len],
             &mut e.registry,
             old_position,
             &mut e.relocs,
@@ -275,8 +275,6 @@ impl CodeMemory {
         if let Some(e) = previous {
             self.entries.push(e);
         }
-
-        self.position = 0;
 
         Ok(())
     }

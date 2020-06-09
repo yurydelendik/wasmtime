@@ -95,7 +95,6 @@ impl CompiledModule {
         let Compilation {
             mut code_memory,
             finished_functions,
-            code_range,
             trampolines,
             jt_offsets,
             dwarf_sections,
@@ -123,10 +122,14 @@ impl CompiledModule {
 
         // Register GDB JIT images; initialize profiler and load the wasm module.
         let dbg_jit_registration = if !dwarf_sections.is_empty() {
+            let code_range = code_memory
+                .published_ranges()
+                .map(|(start, end)| (start as *const u8, end - start))
+                .collect::<Vec<_>>();
             let bytes = create_dbg_image(
                 dwarf_sections,
                 compiler.isa(),
-                code_range,
+                &code_range,
                 &finished_functions,
             )?;
 
@@ -284,13 +287,13 @@ impl OwnedDataInitializer {
 fn create_dbg_image(
     dwarf_sections: Vec<DwarfSection>,
     isa: &dyn TargetIsa,
-    code_range: (*const u8, usize),
+    code_ranges: &[(*const u8, usize)],
     finished_functions: &PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
 ) -> Result<Vec<u8>, SetupError> {
     let funcs = finished_functions
         .values()
         .map(|allocated: &*mut [VMFunctionBody]| (*allocated) as *const u8)
         .collect::<Vec<_>>();
-    write_debugsections_image(isa, dwarf_sections, code_range, &funcs)
+    write_debugsections_image(isa, dwarf_sections, code_ranges, &funcs)
         .map_err(SetupError::DebugInfo)
 }

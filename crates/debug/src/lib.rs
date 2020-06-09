@@ -89,7 +89,7 @@ fn patch_dwarf_sections(sections: &mut [DwarfSection], funcs: &[*const u8]) {
 pub fn write_debugsections_image(
     isa: &dyn TargetIsa,
     mut sections: Vec<DwarfSection>,
-    code_region: (*const u8, usize),
+    code_regions: &[(*const u8, usize)],
     funcs: &[*const u8],
 ) -> Result<Vec<u8>, Error> {
     if isa.triple().architecture != target_lexicon::Architecture::X86_64 {
@@ -100,6 +100,10 @@ pub fn write_debugsections_image(
     }
 
     let mut obj = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+
+    // FIXME can be multiple
+    assert_eq!(code_regions.len(), 1);
+    let code_region = &code_regions[0];
 
     assert!(!code_region.0.is_null() && code_region.1 > 0);
     assert_gt!(funcs.len(), 0);
