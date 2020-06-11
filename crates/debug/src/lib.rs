@@ -101,16 +101,14 @@ pub fn write_debugsections_image(
 
     let mut obj = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
 
-    // FIXME can be multiple
-    assert_eq!(code_regions.len(), 1);
-    let code_region = &code_regions[0];
-
-    assert!(!code_region.0.is_null() && code_region.1 > 0);
     assert_gt!(funcs.len(), 0);
 
-    let body = unsafe { std::slice::from_raw_parts(code_region.0, code_region.1) };
-    let section_id = obj.add_section(vec![], ".text.all".as_bytes().to_vec(), SectionKind::Text);
-    obj.append_section_data(section_id, body, 1);
+    for (i, code_region) in code_regions.iter().enumerate() {
+        let section_name = format!(".text.{}", i).as_bytes().to_vec();
+        let section_id = obj.add_section(vec![], section_name, SectionKind::Text);
+        let body = unsafe { std::slice::from_raw_parts(code_region.0, code_region.1) };
+        obj.append_section_data(section_id, body, 1);
+    }
 
     // Get DWARF sections and patch relocs
     patch_dwarf_sections(&mut sections, funcs);
@@ -120,7 +118,7 @@ pub fn write_debugsections_image(
     // LLDB is too "magical" about mach-o, generating elf
     let mut bytes = obj.write()?;
     // elf is still missing details...
-    convert_object_elf_to_loadable_file(&mut bytes, code_region.0);
+    convert_object_elf_to_loadable_file(&mut bytes, code_regions);
 
     // let mut file = ::std::fs::File::create(::std::path::Path::new("test.o")).expect("file");
     // ::std::io::Write::write_all(&mut file, &bytes).expect("write");
@@ -128,7 +126,7 @@ pub fn write_debugsections_image(
     Ok(bytes)
 }
 
-fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_ptr: *const u8) {
+fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_regions: &[(*const u8, usize)]) {
     use object::elf::*;
     use object::endian::LittleEndian;
     use std::ffi::CStr;
@@ -165,7 +163,7 @@ fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_ptr: *const u8)
         }
         shstrtab_off = section.sh_offset.get(e);
     }
-    let mut segment = None;
+    let mut segments: Vec<Option<_>> = vec![None; code_regions.len()];
     for i in 0..e_shnum {
         let off = e_shoff as isize + i as isize * e_shentsize as isize;
         let section: &mut SectionHeader64<LittleEndian> =
@@ -185,36 +183,45 @@ fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_ptr: *const u8)
             .to_str()
             .expect("name")
         };
-        if sh_name != ".text.all" {
+        if !sh_name.starts_with(".text.") {
             continue;
         }
 
-        assert!(segment.is_none());
-        // Functions was added at write_debugsections_image as .text.all.
+        // Functions were added at write_debugsections_image as .text.*
+        let i = sh_name[".text.".len()..].parse::<usize>().unwrap();
+
+        assert!(segments[i].is_none());
         // Patch vaddr, and save file location and its size.
-        section.sh_addr.set(e, code_ptr as u64);
+        section.sh_addr.set(e, code_regions[i].0 as u64);
         let sh_offset = section.sh_offset.get(e);
         let sh_size = section.sh_size.get(e);
-        segment = Some((sh_offset, code_ptr, sh_size));
-        // Fix name too: cut it to just ".text"
-        bytes[(shstrtab_off + sh_name_off as u64) as usize + ".text".len()] = 0;
+        segments[i] = Some((sh_offset, sh_size));
     }
 
     // LLDB wants segment with virtual address set, placing them at the end of ELF.
     let ph_off = bytes.len();
     let e_phentsize = size_of::<ProgramHeader64<LittleEndian>>();
-    if let Some((sh_offset, v_offset, sh_size)) = segment {
-        bytes.resize(ph_off + e_phentsize, 0);
-        let program: &mut ProgramHeader64<LittleEndian> =
-            unsafe { &mut *(bytes.as_ptr().add(ph_off) as *mut ProgramHeader64<_>) };
-        program.p_type.set(e, PT_LOAD);
-        program.p_offset.set(e, sh_offset);
-        program.p_vaddr.set(e, v_offset as u64);
-        program.p_paddr.set(e, v_offset as u64);
-        program.p_filesz.set(e, sh_size as u64);
-        program.p_memsz.set(e, sh_size as u64);
-    } else {
-        unreachable!();
+    let e_phnum = code_regions.len();
+    bytes.resize(ph_off + e_phentsize * e_phnum, 0);
+    for (i, (segment, code_region)) in segments
+        .into_iter()
+        .zip(code_regions.into_iter())
+        .enumerate()
+    {
+        if let Some((sh_offset, sh_size)) = segment {
+            let (v_offset, size) = *code_region;
+            let program: &mut ProgramHeader64<LittleEndian> = unsafe {
+                &mut *(bytes.as_ptr().add(ph_off + i * e_phentsize) as *mut ProgramHeader64<_>)
+            };
+            program.p_type.set(e, PT_LOAD);
+            program.p_offset.set(e, sh_offset);
+            program.p_vaddr.set(e, v_offset as u64);
+            program.p_paddr.set(e, v_offset as u64);
+            program.p_filesz.set(e, sh_size as u64);
+            program.p_memsz.set(e, size as u64);
+        } else {
+            unreachable!();
+        }
     }
 
     // It is somewhat loadable ELF file at this moment.
@@ -223,5 +230,5 @@ fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_ptr: *const u8)
     header.e_type.set(e, ET_DYN);
     header.e_phoff.set(e, ph_off as u64);
     header.e_phentsize.set(e, e_phentsize as u16);
-    header.e_phnum.set(e, 1u16);
+    header.e_phnum.set(e, e_phnum as u16);
 }
