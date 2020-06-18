@@ -186,6 +186,14 @@ impl Compiler {
             vec![]
         };
 
+        let _obj = super::object::build_object(
+            &*self.isa,
+            &compilation,
+            &relocations,
+            &translation.module,
+            &dwarf_sections,
+        )?;
+
         // Allocate all of the compiled functions into executable memory,
         // copying over their contents.
         let finished_functions = allocate_functions(&mut code_memory, &compilation, &relocations)
@@ -236,6 +244,16 @@ pub fn make_trampoline(
     signature: &ir::Signature,
     value_size: usize,
 ) -> Result<VMTrampoline, SetupError> {
+    let (func, relocs) = build_trampoline(isa, fn_builder_ctx, signature, value_size)?;
+    allocate_trampoline(code_memory, &func, relocs)
+}
+
+pub(crate) fn build_trampoline(
+    isa: &dyn TargetIsa,
+    fn_builder_ctx: &mut FunctionBuilderContext,
+    signature: &ir::Signature,
+    value_size: usize,
+) -> Result<(CompiledFunction, Vec<Relocation>), SetupError> {
     let pointer_type = isa.pointer_type();
     let mut wrapper_sig = ir::Signature::new(isa.frontend_config().default_call_conv);
 
@@ -342,15 +360,23 @@ pub fn make_trampoline(
         )))
     })?;
 
+    Ok((
+        CompiledFunction {
+            body: code_buf,
+            jt_offsets: context.func.jt_offsets,
+            unwind_info,
+        },
+        reloc_sink.relocs,
+    ))
+}
+
+fn allocate_trampoline(
+    code_memory: &mut CodeMemory,
+    compiled_function: &CompiledFunction,
+    relocs: Vec<Relocation>,
+) -> Result<VMTrampoline, SetupError> {
     let ptr = code_memory
-        .allocate_for_function(
-            &CompiledFunction {
-                body: code_buf,
-                jt_offsets: context.func.jt_offsets,
-                unwind_info,
-            },
-            reloc_sink.relocs.iter(),
-        )
+        .allocate_for_function(compiled_function, relocs.iter())
         .map_err(|message| SetupError::Instantiate(InstantiationError::Resource(message)))?
         .as_ptr();
     Ok(unsafe { std::mem::transmute::<*const VMFunctionBody, VMTrampoline>(ptr) })

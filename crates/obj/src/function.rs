@@ -20,7 +20,7 @@ pub fn declare_functions(
             size: 0,
             kind: SymbolKind::Text,
             scope: SymbolScope::Unknown,
-            weak: false,
+            weak: true,
             section: SymbolSection::Undefined,
             flags: SymbolFlags::None,
         });

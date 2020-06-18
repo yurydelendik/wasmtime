@@ -26,6 +26,7 @@ mod compiler;
 mod imports;
 mod instantiate;
 mod link;
+mod object;
 mod resolver;
 mod unwind;
 
