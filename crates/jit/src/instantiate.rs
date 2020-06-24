@@ -93,15 +93,24 @@ impl CompiledModule {
         }
 
         let Compilation {
-            mut code_memory,
-            finished_functions,
-            trampolines,
+            obj,
+            unwind_info,
             jt_offsets,
             dwarf_sections,
             traps,
             stack_maps,
             address_transform,
         } = compiler.compile(&translation, debug_data)?;
+
+        // Allocate all of the compiled functions into executable memory,
+        // copying over their contents.
+        let (mut code_memory, finished_functions, trampolines) =
+            build_code_memory(&obj, unwind_info).map_err(|message| {
+                SetupError::Instantiate(InstantiationError::Resource(format!(
+                    "failed to build code memory for functions: {}",
+                    message
+                )))
+            })?;
 
         let ModuleTranslation {
             module,
@@ -296,4 +305,37 @@ fn create_dbg_image(
         .collect::<Vec<_>>();
     write_debugsections_image(isa, dwarf_sections, code_ranges, &funcs)
         .map_err(SetupError::DebugInfo)
+}
+
+fn build_code_memory(
+    obj: &[u8],
+    unwind_info: Vec<crate::object::ObjectUnwindInfo>,
+) -> Result<
+    (
+        CodeMemory,
+        PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
+        PrimaryMap<SignatureIndex, VMTrampoline>,
+    ),
+    String,
+> {
+    let mut code_memory = CodeMemory::new();
+
+    let (fat_ptrs, trampoline_ptrs) = code_memory.allocate_for_object(obj, unwind_info)?;
+
+    // Second, create a PrimaryMap from result vector of pointers.
+    let mut result = PrimaryMap::with_capacity(fat_ptrs.len());
+    for i in 0..fat_ptrs.len() {
+        let fat_ptr: *mut [VMFunctionBody] = fat_ptrs[i];
+        result.push(fat_ptr);
+    }
+
+    let mut trampolines = PrimaryMap::with_capacity(trampoline_ptrs.len());
+    for i in 0..trampoline_ptrs.len() {
+        let fat_ptr = unsafe {
+            std::mem::transmute::<*const VMFunctionBody, VMTrampoline>(trampoline_ptrs[i].as_ptr())
+        };
+        trampolines.push(fat_ptr);
+    }
+
+    Ok((code_memory, result, trampolines))
 }

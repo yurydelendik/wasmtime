@@ -62,8 +62,9 @@ fn to_object_relocations<'a>(
     })
 }
 
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ObjectUnwindInfo {
+pub enum ObjectUnwindInfo {
     Func(FuncIndex, UnwindInfo),
     Trampoline(SignatureIndex, UnwindInfo),
 }

@@ -11,7 +11,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use wasmtime_debug::{emit_dwarf, DebugInfoData, DwarfSection};
 use wasmtime_environ::entity::{EntityRef, PrimaryMap};
 use wasmtime_environ::isa::{TargetFrontendConfig, TargetIsa};
-use wasmtime_environ::wasm::{DefinedFuncIndex, DefinedMemoryIndex, MemoryIndex, SignatureIndex};
+use wasmtime_environ::wasm::{DefinedFuncIndex, DefinedMemoryIndex, MemoryIndex};
 use wasmtime_environ::{
     CacheConfig, CompileError, CompiledFunction, Compiler as _C, Module, ModuleAddressMap,
     ModuleMemoryOffset, ModuleTranslation, ModuleVmctxInfo, Relocation, RelocationTarget,
@@ -109,9 +109,8 @@ fn transform_dwarf_data(
 
 #[allow(missing_docs)]
 pub struct Compilation {
-    pub code_memory: CodeMemory,
-    pub finished_functions: PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
-    pub trampolines: PrimaryMap<SignatureIndex, VMTrampoline>,
+    pub obj: Vec<u8>,
+    pub unwind_info: Vec<crate::object::ObjectUnwindInfo>,
     pub jt_offsets: PrimaryMap<DefinedFuncIndex, ir::JumpTableOffsets>,
     pub dwarf_sections: Vec<DwarfSection>,
     pub traps: Traps,
@@ -199,20 +198,9 @@ impl Compiler {
 
         let jt_offsets = compilation.get_jt_offsets();
 
-        // Allocate all of the compiled functions into executable memory,
-        // copying over their contents.
-        let (code_memory, finished_functions, trampolines) = allocate_functions(&obj, unwind_info)
-            .map_err(|message| {
-                SetupError::Instantiate(InstantiationError::Resource(format!(
-                    "failed to allocate memory for functions: {}",
-                    message
-                )))
-            })?;
-
         Ok(Compilation {
-            code_memory,
-            finished_functions,
-            trampolines,
+            obj,
+            unwind_info,
             jt_offsets,
             dwarf_sections,
             traps,
@@ -366,39 +354,6 @@ fn allocate_trampoline(
         .map_err(|message| SetupError::Instantiate(InstantiationError::Resource(message)))?
         .as_ptr();
     Ok(unsafe { std::mem::transmute::<*const VMFunctionBody, VMTrampoline>(ptr) })
-}
-
-fn allocate_functions(
-    obj: &[u8],
-    unwind_info: Vec<crate::object::ObjectUnwindInfo>,
-) -> Result<
-    (
-        CodeMemory,
-        PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
-        PrimaryMap<SignatureIndex, VMTrampoline>,
-    ),
-    String,
-> {
-    let mut code_memory = CodeMemory::new();
-
-    let (fat_ptrs, trampoline_ptrs) = code_memory.allocate_for_object(obj, unwind_info)?;
-
-    // Second, create a PrimaryMap from result vector of pointers.
-    let mut result = PrimaryMap::with_capacity(fat_ptrs.len());
-    for i in 0..fat_ptrs.len() {
-        let fat_ptr: *mut [VMFunctionBody] = fat_ptrs[i];
-        result.push(fat_ptr);
-    }
-
-    let mut trampolines = PrimaryMap::with_capacity(trampoline_ptrs.len());
-    for i in 0..trampoline_ptrs.len() {
-        let fat_ptr = unsafe {
-            std::mem::transmute::<*const VMFunctionBody, VMTrampoline>(trampoline_ptrs[i].as_ptr())
-        };
-        trampolines.push(fat_ptr);
-    }
-
-    Ok((code_memory, result, trampolines))
 }
 
 /// We don't expect trampoline compilation to produce many relocations, so
