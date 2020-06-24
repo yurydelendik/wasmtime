@@ -7,8 +7,8 @@ use object::{self, write::Object};
 use std::collections::HashMap;
 use wasmtime_debug::DwarfSection;
 use wasmtime_environ::entity::{EntityRef, PrimaryMap};
-use wasmtime_environ::isa::TargetIsa;
-use wasmtime_environ::wasm::FuncIndex;
+use wasmtime_environ::isa::{unwind::UnwindInfo, TargetIsa};
+use wasmtime_environ::wasm::{FuncIndex, SignatureIndex};
 use wasmtime_environ::{Module, Relocation, RelocationTarget, Relocations};
 
 fn to_object_relocations<'a>(
@@ -62,13 +62,19 @@ fn to_object_relocations<'a>(
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ObjectUnwindInfo {
+    Func(FuncIndex, UnwindInfo),
+    Trampoline(SignatureIndex, UnwindInfo),
+}
+
 pub(crate) fn build_object(
     isa: &dyn TargetIsa,
     compilation: &wasmtime_environ::Compilation,
     relocations: &Relocations,
     module: &Module,
     dwarf_sections: &[DwarfSection],
-) -> Result<Object, anyhow::Error> {
+) -> Result<(Object, Vec<ObjectUnwindInfo>), anyhow::Error> {
     const CODE_SECTION_ALIGNMENT: u64 = 0x1000;
     let mut obj = Object::new(
         object::BinaryFormat::Elf,
@@ -81,6 +87,8 @@ pub(crate) fn build_object(
         ".text".as_bytes().to_vec(),
         object::SectionKind::Text,
     );
+
+    let mut unwind_info = Vec::new();
 
     let mut func_symbols = PrimaryMap::with_capacity(compilation.len());
     for index in 0..module.local.num_imported_funcs {
@@ -111,6 +119,18 @@ pub(crate) fn build_object(
             flags: object::SymbolFlags::None,
         });
         func_symbols.push(symbol_id);
+        if let Some(UnwindInfo::WindowsX64(info)) = &func.unwind_info {
+            let unwind_size = info.emit_size();
+            let mut unwind_info = vec![0; unwind_size];
+            info.emit(&mut unwind_info);
+            let _off = obj.append_section_data(section_id, &unwind_info, 4);
+        }
+        if let Some(info) = &func.unwind_info {
+            unwind_info.push(ObjectUnwindInfo::Func(
+                FuncIndex::new(module.local.num_imported_funcs + index),
+                info.clone(),
+            ))
+        }
     }
 
     let mut libcalls = HashMap::new();
@@ -163,6 +183,15 @@ pub(crate) fn build_object(
             flags: object::SymbolFlags::None,
         });
         trampoline_relocs.insert(symbol_id, relocs);
+        if let Some(UnwindInfo::WindowsX64(info)) = &func.unwind_info {
+            let unwind_size = info.emit_size();
+            let mut unwind_info = vec![0; unwind_size];
+            info.emit(&mut unwind_info);
+            let _off = obj.append_section_data(section_id, &unwind_info, 4);
+        }
+        if let Some(info) = &func.unwind_info {
+            unwind_info.push(ObjectUnwindInfo::Trampoline(i, info.clone()))
+        }
     }
     obj.append_section_data(section_id, &[], CODE_SECTION_ALIGNMENT);
 
@@ -229,5 +258,5 @@ pub(crate) fn build_object(
     let mut file = ::std::fs::File::create(::std::path::Path::new("test.o")).expect("file");
     ::std::io::Write::write_all(&mut file, &obj.write().expect("obj")).expect("write");
 
-    Ok(obj)
+    Ok((obj, unwind_info))
 }

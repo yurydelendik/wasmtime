@@ -78,6 +78,14 @@ impl Compilation {
             .map(|(_, func)| func.jt_offsets.clone())
             .collect::<PrimaryMap<DefinedFuncIndex, _>>()
     }
+
+    /// Gets functions unwind info.
+    pub fn get_unwind_info(&self) -> PrimaryMap<DefinedFuncIndex, Option<UnwindInfo>> {
+        self.functions
+            .iter()
+            .map(|(_, func)| func.unwind_info.clone())
+            .collect::<PrimaryMap<DefinedFuncIndex, _>>()
+    }
 }
 
 impl<'a> IntoIterator for &'a Compilation {

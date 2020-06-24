@@ -15,7 +15,7 @@ use wasmtime_environ::wasm::{DefinedFuncIndex, DefinedMemoryIndex, MemoryIndex, 
 use wasmtime_environ::{
     CacheConfig, CompileError, CompiledFunction, Compiler as _C, Module, ModuleAddressMap,
     ModuleMemoryOffset, ModuleTranslation, ModuleVmctxInfo, Relocation, RelocationTarget,
-    Relocations, StackMaps, Traps, Tunables, VMOffsets, ValueLabelsRanges,
+    StackMaps, Traps, Tunables, VMOffsets, ValueLabelsRanges,
 };
 use wasmtime_runtime::{InstantiationError, VMFunctionBody, VMTrampoline};
 
@@ -141,8 +141,6 @@ impl Compiler {
         translation: &ModuleTranslation,
         debug_data: Option<DebugInfoData>,
     ) -> Result<Compilation, SetupError> {
-        let mut code_memory = CodeMemory::new();
-
         let (
             compilation,
             relocations,
@@ -186,42 +184,30 @@ impl Compiler {
             vec![]
         };
 
-        let _obj = super::object::build_object(
+        let (obj, unwind_info) = super::object::build_object(
             &*self.isa,
             &compilation,
             &relocations,
             &translation.module,
             &dwarf_sections,
         )?;
+        let obj = obj.write().map_err(|_| {
+            SetupError::Instantiate(InstantiationError::Resource(
+                "failed to create image memory".to_string(),
+            ))
+        })?;
+
+        let jt_offsets = compilation.get_jt_offsets();
 
         // Allocate all of the compiled functions into executable memory,
         // copying over their contents.
-        let finished_functions = allocate_functions(&mut code_memory, &compilation, &relocations)
+        let (code_memory, finished_functions, trampolines) = allocate_functions(&obj, unwind_info)
             .map_err(|message| {
-            SetupError::Instantiate(InstantiationError::Resource(format!(
-                "failed to allocate memory for functions: {}",
-                message
-            )))
-        })?;
-
-        // Eagerly generate a entry trampoline for every type signature in the
-        // module. This should be "relatively lightweight" for most modules and
-        // guarantees that all functions (including indirect ones through
-        // tables) have a trampoline when invoked through the wasmtime API.
-        let mut cx = FunctionBuilderContext::new();
-        let mut trampolines = PrimaryMap::new();
-        for (_, (_, native_sig)) in translation.module.local.signatures.iter() {
-            let trampoline = make_trampoline(
-                &*self.isa,
-                &mut code_memory,
-                &mut cx,
-                native_sig,
-                std::mem::size_of::<u128>(),
-            )?;
-            trampolines.push(trampoline);
-        }
-
-        let jt_offsets = compilation.get_jt_offsets();
+                SetupError::Instantiate(InstantiationError::Resource(format!(
+                    "failed to allocate memory for functions: {}",
+                    message
+                )))
+            })?;
 
         Ok(Compilation {
             code_memory,
@@ -383,24 +369,36 @@ fn allocate_trampoline(
 }
 
 fn allocate_functions(
-    code_memory: &mut CodeMemory,
-    compilation: &wasmtime_environ::Compilation,
-    relocations: &Relocations,
-) -> Result<PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>, String> {
-    if compilation.is_empty() {
-        return Ok(PrimaryMap::new());
-    }
+    obj: &[u8],
+    unwind_info: Vec<crate::object::ObjectUnwindInfo>,
+) -> Result<
+    (
+        CodeMemory,
+        PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
+        PrimaryMap<SignatureIndex, VMTrampoline>,
+    ),
+    String,
+> {
+    let mut code_memory = CodeMemory::new();
 
-    let fat_ptrs = code_memory.allocate_for_compilation(compilation, relocations)?;
+    let (fat_ptrs, trampoline_ptrs) = code_memory.allocate_for_object(obj, unwind_info)?;
 
     // Second, create a PrimaryMap from result vector of pointers.
-    let mut result = PrimaryMap::with_capacity(compilation.len());
+    let mut result = PrimaryMap::with_capacity(fat_ptrs.len());
     for i in 0..fat_ptrs.len() {
         let fat_ptr: *mut [VMFunctionBody] = fat_ptrs[i];
         result.push(fat_ptr);
     }
 
-    Ok(result)
+    let mut trampolines = PrimaryMap::with_capacity(trampoline_ptrs.len());
+    for i in 0..trampoline_ptrs.len() {
+        let fat_ptr = unsafe {
+            std::mem::transmute::<*const VMFunctionBody, VMTrampoline>(trampoline_ptrs[i].as_ptr())
+        };
+        trampolines.push(fat_ptr);
+    }
+
+    Ok((code_memory, result, trampolines))
 }
 
 /// We don't expect trampoline compilation to produce many relocations, so
