@@ -12,9 +12,8 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use wasmtime_debug::{read_debuginfo, write_debugsections_image, DwarfSection};
+use wasmtime_debug::{create_gdbjit_image, read_debuginfo};
 use wasmtime_environ::entity::{BoxedSlice, PrimaryMap};
-use wasmtime_environ::isa::TargetIsa;
 use wasmtime_environ::wasm::{DefinedFuncIndex, SignatureIndex};
 use wasmtime_environ::{
     CompileError, DataInitializer, DataInitializerLocation, Module, ModuleAddressMap,
@@ -135,12 +134,7 @@ impl CompiledModule {
                 .published_ranges()
                 .map(|(start, end)| (start as *const u8, end - start))
                 .collect::<Vec<_>>();
-            let bytes = create_dbg_image(
-                dwarf_sections,
-                compiler.isa(),
-                &code_range,
-                &finished_functions,
-            )?;
+            let bytes = create_dbg_image(obj, &code_range, &module, &finished_functions)?;
 
             profiler.module_load(&module, &finished_functions, Some(&bytes));
 
@@ -294,16 +288,16 @@ impl OwnedDataInitializer {
 }
 
 fn create_dbg_image(
-    dwarf_sections: Vec<DwarfSection>,
-    isa: &dyn TargetIsa,
+    obj: Vec<u8>,
     code_ranges: &[(*const u8, usize)],
+    module: &Module,
     finished_functions: &PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]>,
 ) -> Result<Vec<u8>, SetupError> {
     let funcs = finished_functions
         .values()
         .map(|allocated: &*mut [VMFunctionBody]| (*allocated) as *const u8)
         .collect::<Vec<_>>();
-    write_debugsections_image(isa, dwarf_sections, code_ranges, &funcs)
+    create_gdbjit_image(obj, code_ranges[0], module.local.num_imported_funcs, &funcs)
         .map_err(SetupError::DebugInfo)
 }
 

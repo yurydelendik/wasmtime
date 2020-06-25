@@ -2,14 +2,10 @@
 
 #![allow(clippy::cast_ptr_alignment)]
 
-use anyhow::{bail, Error};
-use more_asserts::assert_gt;
+use anyhow::Error;
 use object::write::{Object, Relocation, StandardSegment};
-use object::{
-    Architecture, BinaryFormat, Endianness, RelocationEncoding, RelocationKind, SectionKind,
-};
+use object::{RelocationEncoding, RelocationKind, SectionKind};
 use std::collections::HashMap;
-use wasmtime_environ::isa::TargetIsa;
 
 pub use crate::read_debuginfo::{read_debuginfo, DebugInfoData, WasmFileInfo};
 pub use crate::write_debuginfo::{emit_dwarf, DwarfSection};
@@ -56,69 +52,19 @@ pub fn write_debugsections(obj: &mut Object, sections: Vec<DwarfSection>) -> Res
     Ok(())
 }
 
-fn patch_dwarf_sections(sections: &mut [DwarfSection], funcs: &[*const u8]) {
-    for section in sections {
-        const FUNC_SYMBOL_PREFIX: &str = "_wasm_function_";
-        for reloc in section.relocs.iter() {
-            if !reloc.target.starts_with(FUNC_SYMBOL_PREFIX) {
-                // Fixing only "all" section relocs -- all functions are merged
-                // into one blob.
-                continue;
-            }
-            let func_index = reloc.target[FUNC_SYMBOL_PREFIX.len()..]
-                .parse::<usize>()
-                .expect("func index");
-            let target = (funcs[func_index] as u64).wrapping_add(reloc.addend as i64 as u64);
-            let entry_ptr = section.body
-                [reloc.offset as usize..reloc.offset as usize + reloc.size as usize]
-                .as_mut_ptr();
-            unsafe {
-                match reloc.size {
-                    4 => std::ptr::write(entry_ptr as *mut u32, target as u32),
-                    8 => std::ptr::write(entry_ptr as *mut u64, target),
-                    _ => panic!("unexpected reloc entry size"),
-                }
-            }
-        }
-        section
-            .relocs
-            .retain(|r| !r.target.starts_with(FUNC_SYMBOL_PREFIX));
-    }
-}
-
-pub fn write_debugsections_image(
-    isa: &dyn TargetIsa,
-    mut sections: Vec<DwarfSection>,
-    code_regions: &[(*const u8, usize)],
+pub fn create_gdbjit_image(
+    mut bytes: Vec<u8>,
+    code_region: (*const u8, usize),
+    defined_funcs_offset: usize,
     funcs: &[*const u8],
 ) -> Result<Vec<u8>, Error> {
-    if isa.triple().architecture != target_lexicon::Architecture::X86_64 {
-        bail!(
-            "Unsupported architecture for DWARF image: {}",
-            isa.triple().architecture
-        );
-    }
+    assert_correct_elf_format(&mut bytes);
 
-    let mut obj = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+    // patch relocs
+    relocate_dwarf_sections(&mut bytes, defined_funcs_offset, funcs)?;
 
-    assert_gt!(funcs.len(), 0);
-
-    for (i, code_region) in code_regions.iter().enumerate() {
-        let section_name = format!(".text.{}", i).as_bytes().to_vec();
-        let section_id = obj.add_section(vec![], section_name, SectionKind::Text);
-        let body = unsafe { std::slice::from_raw_parts(code_region.0, code_region.1) };
-        obj.append_section_data(section_id, body, 1);
-    }
-
-    // Get DWARF sections and patch relocs
-    patch_dwarf_sections(&mut sections, funcs);
-
-    write_debugsections(&mut obj, sections)?;
-
-    // LLDB is too "magical" about mach-o, generating elf
-    let mut bytes = obj.write()?;
     // elf is still missing details...
-    convert_object_elf_to_loadable_file(&mut bytes, code_regions);
+    convert_object_elf_to_loadable_file(&mut bytes, code_region);
 
     // let mut file = ::std::fs::File::create(::std::path::Path::new("test.o")).expect("file");
     // ::std::io::Write::write_all(&mut file, &bytes).expect("write");
@@ -126,12 +72,61 @@ pub fn write_debugsections_image(
     Ok(bytes)
 }
 
-fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_regions: &[(*const u8, usize)]) {
+fn relocate_dwarf_sections(
+    bytes: &mut [u8],
+    defined_funcs_offset: usize,
+    funcs: &[*const u8],
+) -> Result<(), Error> {
+    use object::read::{File, Object, ObjectSection, RelocationTarget};
+
+    let obj = File::parse(bytes)?;
+    let mut func_symbols = HashMap::new();
+    for (id, sym) in obj.symbols() {
+        match (sym.name(), sym.section_index()) {
+            (Some(name), Some(_section_index)) if name.starts_with("_wasm_function_") => {
+                let index = name["_wasm_function_".len()..].parse::<usize>()?;
+                let data = funcs[index - defined_funcs_offset];
+                func_symbols.insert(id, data);
+            }
+            _ => (),
+        }
+    }
+
+    for section in obj.sections() {
+        for (off, r) in section.relocations() {
+            if r.kind() != RelocationKind::Absolute
+                || r.encoding() != RelocationEncoding::Generic
+                || r.size() != 64
+            {
+                continue;
+            }
+
+            let data = match r.target() {
+                RelocationTarget::Symbol(ref index) => func_symbols.get(index),
+                _ => None,
+            };
+            let data: *const u8 = match data {
+                Some(data) => *data,
+                None => {
+                    continue;
+                }
+            };
+
+            let target = (data as u64).wrapping_add(r.addend() as u64);
+
+            let entry_ptr = section.data_range(off, 8).unwrap().unwrap().as_ptr();
+            unsafe {
+                std::ptr::write(entry_ptr as *mut u64, target);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn assert_correct_elf_format(bytes: &mut Vec<u8>) {
     use object::elf::*;
     use object::endian::LittleEndian;
-    use std::ffi::CStr;
     use std::mem::size_of;
-    use std::os::raw::c_char;
 
     let e = LittleEndian;
     let header: &FileHeader64<LittleEndian> =
@@ -150,7 +145,20 @@ fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_regions: &[(*co
         size_of::<SectionHeader64<LittleEndian>>(),
         "size of sh"
     );
+}
 
+fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_region: (*const u8, usize)) {
+    use object::elf::*;
+    use object::endian::LittleEndian;
+    use std::ffi::CStr;
+    use std::mem::size_of;
+    use std::os::raw::c_char;
+
+    let e = LittleEndian;
+    let header: &FileHeader64<LittleEndian> =
+        unsafe { &*(bytes.as_mut_ptr() as *const FileHeader64<_>) };
+
+    let e_shentsize = header.e_shentsize.get(e);
     let e_shoff = header.e_shoff.get(e);
     let e_shnum = header.e_shnum.get(e);
     let mut shstrtab_off = 0;
@@ -163,7 +171,7 @@ fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_regions: &[(*co
         }
         shstrtab_off = section.sh_offset.get(e);
     }
-    let mut segments: Vec<Option<_>> = vec![None; code_regions.len()];
+    let mut segment: Option<_> = None;
     for i in 0..e_shnum {
         let off = e_shoff as isize + i as isize * e_shentsize as isize;
         let section: &mut SectionHeader64<LittleEndian> =
@@ -183,45 +191,35 @@ fn convert_object_elf_to_loadable_file(bytes: &mut Vec<u8>, code_regions: &[(*co
             .to_str()
             .expect("name")
         };
-        if !sh_name.starts_with(".text.") {
+        if sh_name != ".text" {
             continue;
         }
 
-        // Functions were added at write_debugsections_image as .text.*
-        let i = sh_name[".text.".len()..].parse::<usize>().unwrap();
-
-        assert!(segments[i].is_none());
+        assert!(segment.is_none());
         // Patch vaddr, and save file location and its size.
-        section.sh_addr.set(e, code_regions[i].0 as u64);
+        section.sh_addr.set(e, code_region.0 as u64);
         let sh_offset = section.sh_offset.get(e);
         let sh_size = section.sh_size.get(e);
-        segments[i] = Some((sh_offset, sh_size));
+        segment = Some((sh_offset, sh_size));
     }
 
     // LLDB wants segment with virtual address set, placing them at the end of ELF.
     let ph_off = bytes.len();
     let e_phentsize = size_of::<ProgramHeader64<LittleEndian>>();
-    let e_phnum = code_regions.len();
+    let e_phnum = 1;
     bytes.resize(ph_off + e_phentsize * e_phnum, 0);
-    for (i, (segment, code_region)) in segments
-        .into_iter()
-        .zip(code_regions.into_iter())
-        .enumerate()
-    {
-        if let Some((sh_offset, sh_size)) = segment {
-            let (v_offset, size) = *code_region;
-            let program: &mut ProgramHeader64<LittleEndian> = unsafe {
-                &mut *(bytes.as_ptr().add(ph_off + i * e_phentsize) as *mut ProgramHeader64<_>)
-            };
-            program.p_type.set(e, PT_LOAD);
-            program.p_offset.set(e, sh_offset);
-            program.p_vaddr.set(e, v_offset as u64);
-            program.p_paddr.set(e, v_offset as u64);
-            program.p_filesz.set(e, sh_size as u64);
-            program.p_memsz.set(e, size as u64);
-        } else {
-            unreachable!();
-        }
+    if let Some((sh_offset, sh_size)) = segment {
+        let (v_offset, size) = code_region;
+        let program: &mut ProgramHeader64<LittleEndian> =
+            unsafe { &mut *(bytes.as_ptr().add(ph_off) as *mut ProgramHeader64<_>) };
+        program.p_type.set(e, PT_LOAD);
+        program.p_offset.set(e, sh_offset);
+        program.p_vaddr.set(e, v_offset as u64);
+        program.p_paddr.set(e, v_offset as u64);
+        program.p_filesz.set(e, sh_size as u64);
+        program.p_memsz.set(e, size as u64);
+    } else {
+        unreachable!();
     }
 
     // It is somewhat loadable ELF file at this moment.
