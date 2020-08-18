@@ -14,7 +14,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::rc::{Rc, Weak};
-use std::sync::{Arc, Mutex, MutexGuard, Weak as SyncWeak};
+use std::sync::{Arc, Mutex, Weak as SyncWeak};
 use target_lexicon::Triple;
 use wasmparser::Validator;
 use wasmtime_environ::settings::{self, Configurable, SetError};
