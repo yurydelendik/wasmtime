@@ -34,12 +34,18 @@ use wasmtime::{Config, ProfilingStrategy, Strategy};
 
 pub use obj::compile_to_obj;
 
-fn pick_compilation_strategy(cranelift: bool, lightbeam: bool) -> Result<Strategy> {
-    Ok(match (lightbeam, cranelift) {
-        (true, false) => Strategy::Lightbeam,
-        (false, true) => Strategy::Cranelift,
-        (false, false) => Strategy::Auto,
-        (true, true) => bail!("Can't enable --cranelift and --lightbeam at the same time"),
+fn pick_compilation_strategy(
+    cranelift: bool,
+    lightbeam: bool,
+    interpreter: bool,
+) -> Result<Strategy> {
+    Ok(match (lightbeam, cranelift, interpreter) {
+        (true, false, false) => Strategy::Lightbeam,
+        (false, true, false) => Strategy::Cranelift,
+        (false, false, true) => Strategy::WasmEval,
+        (false, false, false) => Strategy::Auto,
+        (true, true, false) => bail!("Can't enable --cranelift and --lightbeam at the same time"),
+        _ => bail!("Confused with --cranelift, --lightbeam, --interpreter"),
     })
 }
 
@@ -132,6 +138,10 @@ struct CommonOptions {
     #[structopt(long, conflicts_with = "cranelift")]
     lightbeam: bool,
 
+    /// Use WasmEval for all compilation
+    #[structopt(long, conflicts_with = "cranelift", conflicts_with = "lightbeam")]
+    interpreter: bool,
+
     /// Generate jitdump file (supported on --features=profiling build)
     #[structopt(long, conflicts_with = "vtune")]
     jitdump: bool,
@@ -195,7 +205,11 @@ impl CommonOptions {
             .wasm_multi_value(self.enable_multi_value.unwrap_or(true) || self.enable_all)
             .wasm_threads(self.enable_threads || self.enable_all)
             .cranelift_opt_level(self.opt_level())
-            .strategy(pick_compilation_strategy(self.cranelift, self.lightbeam)?)?
+            .strategy(pick_compilation_strategy(
+                self.cranelift,
+                self.lightbeam,
+                self.interpreter,
+            )?)?
             .profiler(pick_profiling_strategy(self.jitdump, self.vtune)?)?
             .cranelift_nan_canonicalization(self.enable_cranelift_nan_canonicalization);
         for CraneliftFlag { name, value } in &self.cranelift_flags {

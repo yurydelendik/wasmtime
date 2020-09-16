@@ -33,6 +33,7 @@ wasmtime-wasi = { path = "../wasi", optional = true }
 [features]
 default = ['jitdump', 'wat', 'wasi', 'cache']
 lightbeam = ["wasmtime/lightbeam"]
+wasmeval = ["wasmtime/wasmeval"]
 jitdump = ["wasmtime/jitdump"]
 cache = ["wasmtime/cache"]
 wasi = ['wasi-common', 'wasmtime-wasi']

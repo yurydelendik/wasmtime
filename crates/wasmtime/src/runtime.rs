@@ -39,7 +39,7 @@ pub struct Config {
     pub(crate) flags: settings::Builder,
     pub(crate) isa_flags: isa::Builder,
     pub(crate) tunables: Tunables,
-    pub(crate) strategy: CompilationStrategy,
+    pub(crate) strategy: Option<CompilationStrategy>,
     #[cfg(feature = "cache")]
     pub(crate) cache_config: CacheConfig,
     pub(crate) profiler: Arc<dyn ProfilingAgent>,
@@ -92,7 +92,7 @@ impl Config {
             tunables,
             flags,
             isa_flags: native::builder(),
-            strategy: CompilationStrategy::Auto,
+            strategy: Some(CompilationStrategy::Auto),
             #[cfg(feature = "cache")]
             cache_config: CacheConfig::new_cache_disabled(),
             profiler: Arc::new(NullProfilerAgent),
@@ -275,13 +275,19 @@ impl Config {
     /// here then an error will be returned.
     pub fn strategy(&mut self, strategy: Strategy) -> Result<&mut Self> {
         self.strategy = match strategy {
-            Strategy::Auto => CompilationStrategy::Auto,
-            Strategy::Cranelift => CompilationStrategy::Cranelift,
+            Strategy::Auto => Some(CompilationStrategy::Auto),
+            Strategy::Cranelift => Some(CompilationStrategy::Cranelift),
             #[cfg(feature = "lightbeam")]
-            Strategy::Lightbeam => CompilationStrategy::Lightbeam,
+            Strategy::Lightbeam => Some(CompilationStrategy::Lightbeam),
             #[cfg(not(feature = "lightbeam"))]
             Strategy::Lightbeam => {
                 anyhow::bail!("lightbeam compilation strategy wasn't enabled at compile time");
+            }
+            #[cfg(feature = "wasmeval")]
+            Strategy::WasmEval => None,
+            #[cfg(not(feature = "wasmeval"))]
+            Strategy::WasmEval => {
+                anyhow::bail!("WasmEval compilation strategy wasn't enabled at compile time");
             }
         };
         Ok(self)
@@ -625,9 +631,11 @@ impl Config {
         return ret;
     }
 
-    fn build_compiler(&self) -> Compiler {
-        let isa = self.target_isa();
-        Compiler::new(isa, self.strategy, self.tunables.clone())
+    fn build_compiler(&self) -> Option<Compiler> {
+        self.strategy.map(|s| {
+            let isa = self.target_isa();
+            Compiler::new(isa, s, self.tunables.clone())
+        })
     }
 
     /// Hashes/fingerprints compiler setting to ensure that compatible
@@ -706,6 +714,9 @@ pub enum Strategy {
     /// To successfully pass this argument to [`Config::strategy`] the
     /// `lightbeam` feature of this crate must be enabled.
     Lightbeam,
+
+    /// Interpreter
+    WasmEval,
 }
 
 /// Possible optimization levels for the Cranelift codegen backend.
@@ -767,7 +778,7 @@ pub struct Engine {
 
 struct EngineInner {
     config: Config,
-    compiler: Compiler,
+    compiler: Option<Compiler>,
 }
 
 impl Engine {
@@ -788,7 +799,7 @@ impl Engine {
         &self.inner.config
     }
 
-    pub(crate) fn compiler(&self) -> &Compiler {
+    pub(crate) fn compiler(&self) -> &Option<Compiler> {
         &self.inner.compiler
     }
 

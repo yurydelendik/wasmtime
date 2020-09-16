@@ -59,7 +59,8 @@ impl WasmToObjCommand {
             pretty_env_logger::init();
         }
 
-        let strategy = pick_compilation_strategy(self.common.cranelift, self.common.lightbeam)?;
+        let strategy =
+            pick_compilation_strategy(self.common.cranelift, self.common.lightbeam, false)?;
 
         let data = wat::parse_file(&self.module).context("failed to parse module")?;
 

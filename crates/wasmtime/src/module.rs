@@ -8,6 +8,11 @@ use std::sync::{Arc, Mutex};
 use wasmtime_cache::ModuleCacheEntry;
 use wasmtime_jit::{CompilationArtifacts, CompiledModule};
 
+#[cfg(feature = "wasmeval")]
+use wasmtime_environ::wasm;
+#[cfg(feature = "wasmeval")]
+use std::collections::HashMap;
+
 /// A compiled WebAssembly module, ready to be instantiated.
 ///
 /// A `Module` is a compiled in-memory representation of an input WebAssembly
@@ -79,8 +84,24 @@ use wasmtime_jit::{CompilationArtifacts, CompiledModule};
 #[derive(Clone)]
 pub struct Module {
     engine: Engine,
-    compiled: Arc<CompiledModule>,
+    compiled: ModuleInner,
     frame_info_registration: Arc<Mutex<Option<Option<Arc<GlobalFrameInfoRegistration>>>>>,
+}
+
+#[cfg(feature = "wasmeval")]
+struct InterpreterCache {
+    module: wasmeval::Module,
+    exports: Vec<(String, wasmeval::ExternType)>,
+    imports: Vec<(String, String, wasmeval::ExternType)>,
+    types: HashMap<wasmeval::FuncType, wasm::WasmFuncType>,
+    memories: HashMap<wasmeval::MemoryType, wasm::Memory>,
+}
+
+#[derive(Clone)]
+enum ModuleInner {
+    Compiled(Arc<CompiledModule>),
+    #[cfg(feature = "wasmeval")]
+    Interpreted(Arc<InterpreterCache>),
 }
 
 impl Module {
@@ -162,11 +183,16 @@ impl Module {
     /// See [`Module::new`] for other details.
     pub fn new_with_name(engine: &Engine, bytes: impl AsRef<[u8]>, name: &str) -> Result<Module> {
         let mut module = Module::new(engine, bytes.as_ref())?;
-        Arc::get_mut(&mut module.compiled)
-            .unwrap()
-            .module_mut()
-            .expect("mutable module")
-            .name = Some(name.to_string());
+        match &mut module.compiled {
+            ModuleInner::Compiled(c) => {
+                Arc::get_mut(c)
+                    .unwrap()
+                    .module_mut()
+                    .expect("mutable module")
+                    .name = Some(name.to_string());
+            }
+            _ => panic!(),
+        }
         Ok(module)
     }
 
@@ -302,38 +328,83 @@ impl Module {
     }
 
     unsafe fn compile(engine: &Engine, binary: &[u8]) -> Result<Self> {
-        #[cfg(feature = "cache")]
-        let artifacts = ModuleCacheEntry::new("wasmtime", engine.cache_config())
-            .get_data((engine.compiler(), binary), |(compiler, binary)| {
-                CompilationArtifacts::build(compiler, binary)
-            })?;
-        #[cfg(not(feature = "cache"))]
-        let artifacts = CompilationArtifacts::build(engine.compiler(), binary)?;
+        let compiled = match engine.compiler() {
+            Some(c) => {
+                #[cfg(feature = "cache")]
+                let artifacts = ModuleCacheEntry::new("wasmtime", engine.cache_config())
+                    .get_data((c, binary), |(compiler, binary)| {
+                        CompilationArtifacts::build(compiler, binary)
+                    })?;
+                #[cfg(not(feature = "cache"))]
+                let artifacts = CompilationArtifacts::build(c, binary)?;
 
-        let compiled = CompiledModule::from_artifacts(
-            artifacts,
-            engine.compiler().isa(),
-            &*engine.config().profiler,
-        )?;
+                ModuleInner::Compiled(Arc::new(CompiledModule::from_artifacts(
+                    artifacts,
+                    c.isa(),
+                    &*engine.config().profiler,
+                )?))
+            }
+            #[cfg(feature = "wasmeval")]
+            None => {
+                use std::iter::FromIterator;
+                let module = wasmeval::Module::new(binary.to_vec().into_boxed_slice())?;
+                let exports = module.exports();
+                let imports = module.imports();
+                let types = HashMap::from_iter(
+                    module.types().into_iter().map(|ft| {
+                        (
+                            (*ft).clone(),
+                            wasm::WasmFuncType {
+                                params: Box::new([]),
+                                returns: Box::new([]),
+                            })
+                    })
+                );
+                let memories = HashMap::from_iter(
+                    module.memories().into_iter().map(|m| {
+                        (
+                            m.clone(),
+                            wasm::Memory {
+                                minimum: 0,
+                                maximum: None,
+                                shared: false,
+                            }
+                        )
+                    })
+                );
+                ModuleInner::Interpreted(Arc::new(InterpreterCache {
+                    module,
+                    exports,
+                    imports,
+                    types,
+                    memories,
+                }))
+            }
+        };
 
         Ok(Module {
             engine: engine.clone(),
-            compiled: Arc::new(compiled),
+            compiled,
             frame_info_registration: Arc::new(Mutex::new(None)),
         })
     }
 
     /// Serialize compilation artifacts to the buffer. See also `deseriaize`.
     pub fn serialize(&self) -> Result<Vec<u8>> {
-        let artifacts = (
-            compiler_fingerprint(self.engine.config()),
-            self.compiled.to_compilation_artifacts(),
-        );
+        match &self.compiled {
+            ModuleInner::Compiled(c) => {
+                let artifacts = (
+                    compiler_fingerprint(self.engine.config()),
+                    c.to_compilation_artifacts(),
+                );
 
-        let mut buffer = Vec::new();
-        bincode::serialize_into(&mut buffer, &artifacts)?;
+                let mut buffer = Vec::new();
+                bincode::serialize_into(&mut buffer, &artifacts)?;
 
-        Ok(buffer)
+                Ok(buffer)
+            }
+            _ => panic!(),
+        }
     }
 
     /// Deserializes and creates a module from the compilatio nartifacts.
@@ -355,21 +426,27 @@ impl Module {
             bail!("Incompatible compilation artifact");
         }
 
-        let compiled = CompiledModule::from_artifacts(
-            artifacts,
-            engine.compiler().isa(),
-            &*engine.config().profiler,
-        )?;
+        let compiled = match &engine.compiler() {
+            Some(c) => ModuleInner::Compiled(Arc::new(CompiledModule::from_artifacts(
+                artifacts,
+                c.isa(),
+                &*engine.config().profiler,
+            )?)),
+            None => panic!(),
+        };
 
         Ok(Module {
             engine: engine.clone(),
-            compiled: Arc::new(compiled),
+            compiled,
             frame_info_registration: Arc::new(Mutex::new(None)),
         })
     }
 
     pub(crate) fn compiled_module(&self) -> &CompiledModule {
-        &self.compiled
+        match &self.compiled {
+            ModuleInner::Compiled(c) => c,
+            _ => panic!(),
+        }
     }
 
     /// Returns identifier/name that this [`Module`] has. This name
@@ -397,7 +474,10 @@ impl Module {
     /// # }
     /// ```
     pub fn name(&self) -> Option<&str> {
-        self.compiled.module().name.as_deref()
+        match &self.compiled {
+            ModuleInner::Compiled(c) => c.module().name.as_deref(),
+            _ => panic!(),
+        }
     }
 
     /// Returns the list of imports that this [`Module`] has and must be
@@ -452,14 +532,38 @@ impl Module {
     pub fn imports<'module>(
         &'module self,
     ) -> impl ExactSizeIterator<Item = ImportType<'module>> + 'module {
-        let module = self.compiled.module();
-        module
-            .imports
-            .iter()
-            .map(move |(module_name, name, entity_index)| {
-                let r#type = EntityType::new(entity_index, module);
-                ImportType::new(module_name, name, r#type)
-            })
+        
+        let result: Vec<_> = match &self.compiled {
+            ModuleInner::Compiled(c) => {
+                let module = c.module();
+                module
+                    .imports
+                    .iter()
+                    .map(move |(module_name, name, entity_index)| {
+                        let r#type = EntityType::new(entity_index, module);
+                        ImportType::new(module_name, name, r#type)
+                    }).collect()
+            }
+            ModuleInner::Interpreted(i) => {
+                use crate::types::{FuncType, MemoryType};
+                use wasmeval::ExternType::*;
+
+                i.imports.iter().map(|n| {
+                    ImportType::new(
+                        &n.0,
+                        &n.1,
+                        match n.2 {
+                            Func(ref ft) => EntityType::Function(&i.types[ft]),
+                            Memory(ref m) => EntityType::Memory(&i.memories[m]),
+                            Global {..} => panic!(),
+                            Table {..} => panic!(),
+                            _ => panic!(),
+                        },
+                    )
+                }).collect()
+            }
+        };
+        result.into_iter()
     }
 
     /// Returns the list of exports that this [`Module`] has and will be
@@ -519,11 +623,34 @@ impl Module {
     pub fn exports<'module>(
         &'module self,
     ) -> impl ExactSizeIterator<Item = ExportType<'module>> + 'module {
-        let module = self.compiled.module();
-        module.exports.iter().map(move |(name, entity_index)| {
-            let r#type = EntityType::new(entity_index, module);
-            ExportType::new(name, r#type)
-        })
+        let result: Vec<_> =
+        match &self.compiled {
+            ModuleInner::Compiled(c) => {
+                let module = c.module();
+                module.exports.iter().map(move |(name, entity_index)| {
+                    let r#type = EntityType::new(entity_index, module);
+                    ExportType::new(name, r#type)
+                }).collect()
+            }
+            ModuleInner::Interpreted(i) => {
+                use crate::types::{FuncType, MemoryType};
+                use wasmeval::ExternType::*;
+
+                i.exports.iter().map(|n| {
+                    ExportType::new(
+                        &n.0,
+                        match n.1 {
+                            Func(ref ft) => EntityType::Function(&i.types[ft]),
+                            Memory(ref m) => EntityType::Memory(&i.memories[m]),
+                            Global {..} => panic!(),
+                            Table {..} => panic!(),
+                            _ => panic!(),
+                        },
+                    )
+                }).collect()
+            }
+        };
+        result.into_iter()
     }
 
     /// Looks up an export in this [`Module`] by name.
@@ -570,9 +697,17 @@ impl Module {
     /// # }
     /// ```
     pub fn get_export<'module>(&'module self, name: &'module str) -> Option<ExternType> {
-        let module = self.compiled.module();
-        let entity_index = module.exports.get(name)?;
-        Some(EntityType::new(entity_index, module).extern_type())
+        match &self.compiled {
+            ModuleInner::Compiled(c) => {
+                let module = c.module();
+                let entity_index = module.exports.get(name)?;
+                Some(EntityType::new(entity_index, module).extern_type())
+            }
+            ModuleInner::Interpreted(i) => self
+                .exports()
+                .find(|e| e.name() == name)
+                .map(|e| e.ty().clone()),
+        }
     }
 
     /// Returns the [`Engine`] that this [`Module`] was compiled by.
@@ -584,13 +719,20 @@ impl Module {
     ///
     /// This is required to ensure that any traps can be properly symbolicated.
     pub(crate) fn register_frame_info(&self) -> Option<Arc<GlobalFrameInfoRegistration>> {
-        let mut info = self.frame_info_registration.lock().unwrap();
-        if let Some(info) = &*info {
-            return info.clone();
+        match &self.compiled {
+            ModuleInner::Compiled(c) => {
+                let mut info = self.frame_info_registration.lock().unwrap();
+                if let Some(info) = &*info {
+                    return info.clone();
+                }
+                let ret = super::frame_info::register(c).map(Arc::new);
+                *info = Some(ret.clone());
+                return ret;
+            }
+            ModuleInner::Interpreted(_) => {
+                None
+            }
         }
-        let ret = super::frame_info::register(&self.compiled).map(Arc::new);
-        *info = Some(ret.clone());
-        return ret;
     }
 }
 

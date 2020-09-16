@@ -76,6 +76,7 @@ members = [
 [features]
 default = ["jitdump", "wasmtime/wat", "wasmtime/parallel-compilation"]
 lightbeam = ["wasmtime/lightbeam"]
+wasmeval = ["wasmtime/wasmeval"]
 jitdump = ["wasmtime/jitdump"]
 vtune = ["wasmtime/vtune"]
 
