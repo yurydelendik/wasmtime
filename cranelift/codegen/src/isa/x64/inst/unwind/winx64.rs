@@ -1,51 +1,35 @@
 //! Unwind information for Windows x64 ABI.
 
-use crate::ir::Function;
-use crate::isa::x86::registers::{FPR, GPR};
-use crate::isa::{unwind::winx64::UnwindInfo, CallConv, RegUnit, TargetIsa};
+use crate::isa::unwind::input;
+use crate::isa::unwind::winx64::UnwindInfo;
 use crate::result::CodegenResult;
+use regalloc::{Reg, RegClass};
 
 pub(crate) fn create_unwind_info(
-    func: &Function,
-    isa: &dyn TargetIsa,
+    unwind: input::UnwindInfo<Reg>,
 ) -> CodegenResult<Option<UnwindInfo>> {
-    // Only Windows fastcall is supported for unwind information
-    if func.signature.call_conv != CallConv::WindowsFastcall || func.prologue_end.is_none() {
-        return Ok(None);
-    }
-
-    let unwind = match super::create_unwind_info(func, isa)? {
-        Some(u) => u,
-        None => {
-            return Ok(None);
-        }
-    };
-
     Ok(Some(UnwindInfo::build::<_, RegisterMapper>(unwind)?))
 }
 
 struct RegisterMapper;
 
-impl crate::isa::unwind::winx64::RegisterMapper<RegUnit> for RegisterMapper {
-    fn map(reg: RegUnit) -> crate::isa::unwind::winx64::MappedRegister {
+impl crate::isa::unwind::winx64::RegisterMapper<Reg> for RegisterMapper {
+    fn map(reg: Reg) -> crate::isa::unwind::winx64::MappedRegister {
         use crate::isa::unwind::winx64::MappedRegister;
-        if GPR.contains(reg) {
-            MappedRegister::Int(GPR.index_of(reg) as u8)
-        } else if FPR.contains(reg) {
-            MappedRegister::Xmm(reg as u8)
-        } else {
-            panic!()
+        match reg.get_class() {
+            RegClass::I64 => MappedRegister::Int(reg.get_hw_encoding()),
+            RegClass::V128 => MappedRegister::Xmm(reg.get_hw_encoding()),
+            _ => panic!(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::cursor::{Cursor, FuncCursor};
-    use crate::ir::{ExternalName, InstBuilder, Signature, StackSlotData, StackSlotKind};
-    use crate::isa::unwind::winx64::UnwindCode;
-    use crate::isa::x86::registers::RU;
+    use crate::ir::{ExternalName, Function, InstBuilder, Signature, StackSlotData, StackSlotKind};
+    use crate::isa::unwind::winx64::{UnwindCode, UnwindInfo};
+    use crate::isa::x64::inst::regs;
     use crate::isa::{lookup, CallConv};
     use crate::settings::{builder, Flags};
     use crate::Context;
@@ -53,23 +37,7 @@ mod tests {
     use target_lexicon::triple;
 
     #[test]
-    fn test_wrong_calling_convention() {
-        let isa = lookup(triple!("x86_64"))
-            .expect("expect x86 ISA")
-            .finish(Flags::new(builder()));
-
-        let mut context = Context::for_function(create_function(CallConv::SystemV, None));
-
-        context.compile(&*isa).expect("expected compilation");
-
-        assert_eq!(
-            create_unwind_info(&context.func, &*isa).expect("can create unwind info"),
-            None
-        );
-    }
-
-    #[test]
-    #[cfg_attr(feature = "x64", should_panic)] // TODO #2079
+    #[cfg_attr(feature = "x64", should_panic)] // TODO #2372
     fn test_small_alloc() {
         let isa = lookup(triple!("x86_64"))
             .expect("expect x86 ISA")
@@ -82,9 +50,14 @@ mod tests {
 
         context.compile(&*isa).expect("expected compilation");
 
-        let unwind = create_unwind_info(&context.func, &*isa)
+        let unwind = match context
+            .create_unwind_info(isa.as_ref())
             .expect("can create unwind info")
-            .expect("expected unwind info");
+            .expect("expected unwind info")
+        {
+            crate::isa::unwind::UnwindInfo::WindowsX64(i) => i,
+            _ => panic!("expected UnwindInfo::WindowsX64"),
+        };
 
         assert_eq!(
             unwind,
@@ -96,7 +69,7 @@ mod tests {
                 unwind_codes: vec![
                     UnwindCode::PushRegister {
                         offset: 2,
-                        reg: GPR.index_of(RU::rbp.into()) as u8
+                        reg: regs::rbp().get_hw_encoding()
                     },
                     UnwindCode::StackAlloc {
                         offset: 9,
@@ -127,7 +100,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(feature = "x64", should_panic)] // TODO #2079
+    #[cfg_attr(feature = "x64", should_panic)] // TODO #2372
     fn test_medium_alloc() {
         let isa = lookup(triple!("x86_64"))
             .expect("expect x86 ISA")
@@ -140,9 +113,14 @@ mod tests {
 
         context.compile(&*isa).expect("expected compilation");
 
-        let unwind = create_unwind_info(&context.func, &*isa)
+        let unwind = match context
+            .create_unwind_info(isa.as_ref())
             .expect("can create unwind info")
-            .expect("expected unwind info");
+            .expect("expected unwind info")
+        {
+            crate::isa::unwind::UnwindInfo::WindowsX64(i) => i,
+            _ => panic!("expected UnwindInfo::WindowsX64"),
+        };
 
         assert_eq!(
             unwind,
@@ -154,7 +132,7 @@ mod tests {
                 unwind_codes: vec![
                     UnwindCode::PushRegister {
                         offset: 2,
-                        reg: GPR.index_of(RU::rbp.into()) as u8
+                        reg: regs::rbp().get_hw_encoding()
                     },
                     UnwindCode::StackAlloc {
                         offset: 27,
@@ -189,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(feature = "x64", should_panic)] // TODO #2079
+    #[cfg_attr(feature = "x64", should_panic)] // TODO #2372
     fn test_large_alloc() {
         let isa = lookup(triple!("x86_64"))
             .expect("expect x86 ISA")
@@ -202,9 +180,14 @@ mod tests {
 
         context.compile(&*isa).expect("expected compilation");
 
-        let unwind = create_unwind_info(&context.func, &*isa)
+        let unwind = match context
+            .create_unwind_info(isa.as_ref())
             .expect("can create unwind info")
-            .expect("expected unwind info");
+            .expect("expected unwind info")
+        {
+            crate::isa::unwind::UnwindInfo::WindowsX64(i) => i,
+            _ => panic!("expected UnwindInfo::WindowsX64"),
+        };
 
         assert_eq!(
             unwind,
@@ -216,7 +199,7 @@ mod tests {
                 unwind_codes: vec![
                     UnwindCode::PushRegister {
                         offset: 2,
-                        reg: GPR.index_of(RU::rbp.into()) as u8
+                        reg: regs::rbp().get_hw_encoding()
                     },
                     UnwindCode::StackAlloc {
                         offset: 27,

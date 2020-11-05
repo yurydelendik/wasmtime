@@ -115,9 +115,8 @@ impl MachBackend for X64Backend {
             (Some(info), UnwindInfoKind::SystemV) => {
                 inst::unwind::systemv::create_unwind_info(info.clone())?.map(UnwindInfo::SystemV)
             }
-            (Some(_info), UnwindInfoKind::Windows) => {
-                //TODO inst::unwind::winx64::create_unwind_info(info.clone())?.map(|u| UnwindInfo::WindowsX64(u))
-                None
+            (Some(info), UnwindInfoKind::Windows) => {
+                inst::unwind::winx64::create_unwind_info(info.clone())?.map(UnwindInfo::WindowsX64)
             }
             _ => None,
         })
