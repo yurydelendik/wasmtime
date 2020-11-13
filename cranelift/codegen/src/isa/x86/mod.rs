@@ -174,8 +174,11 @@ impl TargetIsa for Isa {
     }
 
     #[cfg(feature = "unwind")]
-    fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
-        Some(unwind::systemv::create_cie())
+    fn create_systemv_cie(
+        &self,
+        personality: Option<gimli::write::Address>,
+    ) -> Option<gimli::write::CommonInformationEntry> {
+        Some(unwind::systemv::create_cie(personality))
     }
 
     fn as_any(&self) -> &dyn Any {

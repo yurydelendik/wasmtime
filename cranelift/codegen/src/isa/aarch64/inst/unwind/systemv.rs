@@ -4,11 +4,15 @@ use crate::isa::aarch64::inst::regs;
 use crate::isa::unwind::input;
 use crate::isa::unwind::systemv::{RegisterMappingError, UnwindInfo};
 use crate::result::CodegenResult;
-use gimli::{write::CommonInformationEntry, Encoding, Format, Register};
+use gimli::{
+    constants,
+    write::{Address, CommonInformationEntry},
+    Encoding, Format, Register,
+};
 use regalloc::{Reg, RegClass};
 
 /// Creates a new aarch64 common information entry (CIE).
-pub fn create_cie() -> CommonInformationEntry {
+pub fn create_cie(personality: Option<Address>) -> CommonInformationEntry {
     use gimli::write::CallFrameInstruction;
 
     let mut entry = CommonInformationEntry::new(
@@ -25,6 +29,8 @@ pub fn create_cie() -> CommonInformationEntry {
     // Every frame will start with the call frame address (CFA) at SP
     let sp = Register(regs::stack_reg().get_hw_encoding().into());
     entry.add_instruction(CallFrameInstruction::Cfa(sp, 0));
+
+    entry.personality = personality.map(|addr| (constants::DW_EH_PE_udata8, addr));
 
     entry
 }

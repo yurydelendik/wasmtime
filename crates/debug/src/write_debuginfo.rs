@@ -131,7 +131,8 @@ impl Writer for WriterRelocate {
 fn create_frame_table<'a>(isa: &dyn TargetIsa, funcs: &CompiledFunctions) -> Option<FrameTable> {
     let mut table = FrameTable::default();
 
-    let cie_id = table.add_cie(isa.create_systemv_cie()?);
+    // TODO point to a symbol for personality handler.
+    let cie_id = table.add_cie(isa.create_systemv_cie(None)?);
 
     for (i, f) in funcs {
         if let Some(UnwindInfo::SystemV(info)) = &f.unwind_info {

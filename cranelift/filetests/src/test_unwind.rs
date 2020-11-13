@@ -51,7 +51,7 @@ impl SubTest for TestUnwind {
             Some(UnwindInfo::SystemV(info)) => {
                 let mut table = FrameTable::default();
                 let cie = isa
-                    .create_systemv_cie()
+                    .create_systemv_cie(None)
                     .expect("the ISA should support a System V CIE");
 
                 let cie_id = table.add_cie(cie);

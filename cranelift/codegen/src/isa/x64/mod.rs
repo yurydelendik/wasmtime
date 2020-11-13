@@ -124,8 +124,11 @@ impl MachBackend for X64Backend {
     }
 
     #[cfg(feature = "unwind")]
-    fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
-        Some(inst::unwind::systemv::create_cie())
+    fn create_systemv_cie(
+        &self,
+        personality: Option<gimli::write::Address>,
+    ) -> Option<gimli::write::CommonInformationEntry> {
+        Some(inst::unwind::systemv::create_cie(personality))
     }
 }
 

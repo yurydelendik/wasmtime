@@ -3,11 +3,15 @@
 use crate::isa::unwind::input;
 use crate::isa::unwind::systemv::{RegisterMappingError, UnwindInfo};
 use crate::result::CodegenResult;
-use gimli::{write::CommonInformationEntry, Encoding, Format, Register, X86_64};
+use gimli::{
+    constants,
+    write::{Address, CommonInformationEntry},
+    Encoding, Format, Register, X86_64,
+};
 use regalloc::{Reg, RegClass};
 
 /// Creates a new x86-64 common information entry (CIE).
-pub fn create_cie() -> CommonInformationEntry {
+pub fn create_cie(personality: Option<Address>) -> CommonInformationEntry {
     use gimli::write::CallFrameInstruction;
 
     let mut entry = CommonInformationEntry::new(
@@ -27,6 +31,8 @@ pub fn create_cie() -> CommonInformationEntry {
 
     // Every frame will start with the return address at RSP (CFA-8 = RSP+8-8 = RSP)
     entry.add_instruction(CallFrameInstruction::Offset(X86_64::RA, -8));
+
+    entry.personality = personality.map(|addr| (constants::DW_EH_PE_udata8, addr));
 
     entry
 }

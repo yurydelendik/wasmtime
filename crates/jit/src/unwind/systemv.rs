@@ -22,6 +22,27 @@ extern "C" {
     fn __deregister_frame(fde: *const u8);
 }
 
+extern "C" fn personality_handler (
+    _version: u32,
+    /*_Unwind_Action*/ _actions: u32,
+    _exception_class: u64,
+    /*_Unwind_Exception*/ _unwind_exception: *const u8,
+    /*_Unwind_Context*/ _context: *const u8,
+) -> u32 {
+    eprintln!("Personality function!\n");
+    // TODO _UA_SEARCH_PHASE: _URC_HANDLER_FOUND, or otherwise _URC_CONTINUE_UNWIND
+    // TODO _UA_CLEANUP_PHASE (+_UA_HANDLER_FRAME) _URC_INSTALL_CONTEXT to transfer
+    const _UA_SEARCH_PHASE: u32 = 1;
+    const _UA_CLEANUP_PHASE: u32 = 2;
+    const _UA_HANDLER_FRAME: u32 = 4; 
+
+    const _URC_HANDLER_FOUND: u32 = 6;
+    const _URC_INSTALL_CONTEXT: u32 = 7;
+    const _URC_CONTINUE_UNWIND: u32 = 8;
+
+    _URC_CONTINUE_UNWIND
+}
+
 impl UnwindRegistry {
     /// Creates a new unwind registry with the given base address.
     pub fn new(base_address: usize) -> Self {
@@ -76,7 +97,8 @@ impl UnwindRegistry {
 
     fn set_frame_table(&mut self, isa: &dyn TargetIsa) -> Result<()> {
         let mut table = FrameTable::default();
-        let cie_id = table.add_cie(match isa.create_systemv_cie() {
+        let personality = Address::Constant(personality_handler as *const u8 as u64);
+        let cie_id = table.add_cie(match isa.create_systemv_cie(Some(personality)) {
             Some(cie) => cie,
             None => bail!("ISA does not support System V unwind information"),
         });

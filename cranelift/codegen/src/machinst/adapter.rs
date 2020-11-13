@@ -130,8 +130,11 @@ impl TargetIsa for TargetIsaAdapter {
     }
 
     #[cfg(feature = "unwind")]
-    fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
-        self.backend.create_systemv_cie()
+    fn create_systemv_cie(
+        &self,
+        personality: Option<gimli::write::Address>,
+    ) -> Option<gimli::write::CommonInformationEntry> {
+        self.backend.create_systemv_cie(personality)
     }
 
     fn as_any(&self) -> &dyn Any {

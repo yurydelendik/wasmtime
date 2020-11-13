@@ -377,7 +377,10 @@ pub trait MachBackend {
     /// Machine-specific condcode info needed by TargetIsa.
     /// Creates a new System V Common Information Entry for the ISA.
     #[cfg(feature = "unwind")]
-    fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
+    fn create_systemv_cie(
+        &self,
+        _: Option<gimli::write::Address>,
+    ) -> Option<gimli::write::CommonInformationEntry> {
         // By default, an ISA cannot create a System V CIE
         None
     }

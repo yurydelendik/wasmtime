@@ -420,7 +420,10 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     ///
     /// Returns `None` if the ISA does not support System V unwind information.
     #[cfg(feature = "unwind")]
-    fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
+    fn create_systemv_cie(
+        &self,
+        _personality: Option<gimli::write::Address>,
+    ) -> Option<gimli::write::CommonInformationEntry> {
         // By default, an ISA cannot create a System V CIE
         None
     }
