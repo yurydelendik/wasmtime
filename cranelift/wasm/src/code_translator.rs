@@ -535,8 +535,34 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.reachable = false;
         }
         /********************************** Exception handing **********************************/
-        Operator::Try { .. }
-        | Operator::Catch
+        Operator::Try { ty } => {
+            let (params, results) = blocktype_params_results(validator, *ty)?;
+            let next = block_with_params(builder, results.clone(), environ)?;
+            state.push_try(next, params.len(), results.len());
+        }
+        Operator::Catch => {
+            let i = state.control_stack.len() - 1;
+            match state.control_stack[i] {
+                ControlStackFrame::Try {
+                    destination,
+                    num_return_values,
+                    ..
+                } => {
+                    canonicalise_then_jump(builder, destination, state.peekn(num_return_values));
+                    state.popn(num_return_values);
+
+                    // Generate landing pad with exception arg.
+                    let catch_params = vec![wasmparser::Type::ExnRef];
+                    let catch_block = block_with_params(builder, catch_params, environ)?;
+                    builder.seal_block(catch_block);
+                    builder.switch_to_block(catch_block);
+
+                    state.pushn(builder.block_params(catch_block));
+                    state.reachable = true;
+                }
+                _ => unreachable!(),
+            }
+        }
         | Operator::BrOnExn { .. }
         | Operator::Throw { .. }
         | Operator::Rethrow => {

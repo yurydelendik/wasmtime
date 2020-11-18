@@ -777,6 +777,7 @@ impl<'data> ModuleEnvironment<'data> for DummyEnvironment {
             simd: true,
             reference_types: true,
             bulk_memory: true,
+            exceptions: true,
             ..WasmFeatures::default()
         }
     }

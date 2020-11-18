@@ -85,6 +85,13 @@ pub enum ControlStackFrame {
         num_return_values: usize,
         original_stack_size: usize,
     },
+    Try {
+        destination: Block,
+        num_param_values: usize,
+        num_return_values: usize,
+        original_stack_size: usize,
+        exit_is_branched_to: bool,
+    },
 }
 
 /// Helper methods for the control stack objects.
@@ -95,6 +102,9 @@ impl ControlStackFrame {
                 num_return_values, ..
             }
             | Self::Block {
+                num_return_values, ..
+            }
+            | Self::Try {
                 num_return_values, ..
             }
             | Self::Loop {
@@ -110,6 +120,9 @@ impl ControlStackFrame {
             | Self::Block {
                 num_param_values, ..
             }
+            | Self::Try {
+                num_param_values, ..
+            }
             | Self::Loop {
                 num_param_values, ..
             } => num_param_values,
@@ -119,12 +132,15 @@ impl ControlStackFrame {
         match *self {
             Self::If { destination, .. }
             | Self::Block { destination, .. }
+            | Self::Try { destination, .. }
             | Self::Loop { destination, .. } => destination,
         }
     }
     pub fn br_destination(&self) -> Block {
         match *self {
-            Self::If { destination, .. } | Self::Block { destination, .. } => destination,
+            Self::If { destination, .. }
+            | Self::Block { destination, .. }
+            | Self::Try { destination, .. } => destination,
             Self::Loop { header, .. } => header,
         }
     }
@@ -140,6 +156,10 @@ impl ControlStackFrame {
                 original_stack_size,
                 ..
             }
+            | Self::Try {
+                original_stack_size,
+                ..
+            }
             | Self::Loop {
                 original_stack_size,
                 ..
@@ -148,7 +168,7 @@ impl ControlStackFrame {
     }
     pub fn is_loop(&self) -> bool {
         match *self {
-            Self::If { .. } | Self::Block { .. } => false,
+            Self::If { .. } | Self::Block { .. } | Self::Try { .. } => false,
             Self::Loop { .. } => true,
         }
     }
@@ -160,6 +180,10 @@ impl ControlStackFrame {
                 ..
             }
             | Self::Block {
+                exit_is_branched_to,
+                ..
+            }
+            | Self::Try {
                 exit_is_branched_to,
                 ..
             } => exit_is_branched_to,
@@ -174,6 +198,10 @@ impl ControlStackFrame {
                 ..
             }
             | Self::Block {
+                ref mut exit_is_branched_to,
+                ..
+            }
+            | Self::Try {
                 ref mut exit_is_branched_to,
                 ..
             } => *exit_is_branched_to = true,
@@ -436,6 +464,23 @@ impl FuncTranslationState {
             head_is_reachable: self.reachable,
             consequent_ends_reachable: None,
             blocktype,
+        });
+    }
+
+    /// Push an if on the control stack.
+    pub(crate) fn push_try(
+        &mut self,
+        following_code: Block,
+        num_param_types: usize,
+        num_result_types: usize,
+    ) {
+        debug_assert!(num_param_types <= self.stack.len());
+        self.control_stack.push(ControlStackFrame::Try {
+            destination: following_code,
+            original_stack_size: self.stack.len() - num_param_types,
+            num_param_values: num_param_types,
+            num_return_values: num_result_types,
+            exit_is_branched_to: false,
         });
     }
 }
