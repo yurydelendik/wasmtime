@@ -90,6 +90,7 @@ pub enum ControlStackFrame {
         num_param_values: usize,
         num_return_values: usize,
         original_stack_size: usize,
+        catch_block: Block,
         exit_is_branched_to: bool,
     },
 }
@@ -252,6 +253,8 @@ pub struct FuncTranslationState {
     /// like End, Return, or Unreachable.
     pub(crate) reachable: bool,
 
+    pub(crate) landing_pads_stack: Vec<Block>,
+
     // Map of global variables that have already been created by `FuncEnvironment::make_global`.
     globals: HashMap<GlobalIndex, GlobalVariable>,
 
@@ -288,6 +291,7 @@ impl FuncTranslationState {
             stack: Vec::new(),
             control_stack: Vec::new(),
             reachable: true,
+            landing_pads_stack: Vec::new(),
             globals: HashMap::new(),
             heaps: HashMap::new(),
             tables: HashMap::new(),
@@ -467,12 +471,17 @@ impl FuncTranslationState {
         });
     }
 
+    pub(crate) fn landing_pad(&self) -> Option<Block> {
+        self.landing_pads_stack.last().map(|p| *p)
+    }
+
     /// Push an if on the control stack.
     pub(crate) fn push_try(
         &mut self,
         following_code: Block,
         num_param_types: usize,
         num_result_types: usize,
+        catch_block: Block,
     ) {
         debug_assert!(num_param_types <= self.stack.len());
         self.control_stack.push(ControlStackFrame::Try {
@@ -480,8 +489,11 @@ impl FuncTranslationState {
             original_stack_size: self.stack.len() - num_param_types,
             num_param_values: num_param_types,
             num_return_values: num_result_types,
+            catch_block,
             exit_is_branched_to: false,
         });
+
+        self.landing_pads_stack.push(catch_block);
     }
 }
 

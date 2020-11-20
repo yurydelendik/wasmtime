@@ -2872,6 +2872,18 @@ impl<'a> Parser<'a> {
                     args: args.into_value_list(&[arg], &mut ctx.function.dfg.value_lists),
                 }
             }
+            InstructionFormat::BranchCatch => {
+                let arg = self.match_value("expected SSA value first operand")?;
+                self.match_token(Token::Comma, "expected ',' between operands")?;
+                let block_num = self.match_block("expected branch destination block")?;
+                let args = self.parse_opt_value_list()?;
+                InstructionData::BranchCatch {
+                    opcode,
+                    void: (),
+                    destination: block_num,
+                    args: args.into_value_list(&[arg], &mut ctx.function.dfg.value_lists),
+                }
+            }
             InstructionFormat::BranchIcmp => {
                 let cond = self.match_enum("expected intcc condition code")?;
                 let lhs = self.match_value("expected SSA value first operand")?;

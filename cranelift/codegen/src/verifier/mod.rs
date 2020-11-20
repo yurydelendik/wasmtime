@@ -652,6 +652,11 @@ impl<'a> Verifier<'a> {
                 ref args,
                 ..
             }
+            | BranchCatch {
+                destination,
+                ref args,
+                ..
+            }
             | BranchIcmp {
                 destination,
                 ref args,

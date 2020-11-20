@@ -15,6 +15,7 @@ pub(crate) struct Formats {
     pub(crate) branch_table: Rc<InstructionFormat>,
     pub(crate) branch_table_base: Rc<InstructionFormat>,
     pub(crate) branch_table_entry: Rc<InstructionFormat>,
+    pub(crate) branch_catch: Rc<InstructionFormat>,
     pub(crate) call: Rc<InstructionFormat>,
     pub(crate) call_indirect: Rc<InstructionFormat>,
     pub(crate) cond_trap: Rc<InstructionFormat>,
@@ -145,6 +146,12 @@ impl Formats {
 
             branch: Builder::new("Branch")
                 .value()
+                .imm(&entities.block)
+                .varargs()
+                .build(),
+
+            branch_catch: Builder::new("BranchCatch")
+                .imm(&imm.catch)
                 .imm(&entities.block)
                 .varargs()
                 .build(),

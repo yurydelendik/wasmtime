@@ -138,6 +138,7 @@ where
         Opcode::BrIcmp => branch_when(icmp(inst.cond_code().unwrap(), &arg(1)?, &arg(2)?)?)?,
         Opcode::Brif => branch_when(state.has_iflag(inst.cond_code().unwrap()))?,
         Opcode::Brff => branch_when(state.has_fflag(inst.fp_cond_code().unwrap()))?,
+        Opcode::BrCatch => ControlFlow::Continue,
         Opcode::BrTable => unimplemented!("BrTable"),
         Opcode::JumpTableEntry => unimplemented!("JumpTableEntry"),
         Opcode::JumpTableBase => unimplemented!("JumpTableBase"),

@@ -2517,6 +2517,7 @@ fn define_control_flow(
     let brif = shared.by_name("brif");
     let brnz = shared.by_name("brnz");
     let brz = shared.by_name("brz");
+    let br_catch = shared.by_name("br_catch");
     let call = shared.by_name("call");
     let call_indirect = shared.by_name("call_indirect");
     let debugtrap = shared.by_name("debugtrap");
@@ -2658,6 +2659,11 @@ fn define_control_flow(
     e.enc64_rec(trapif, rec_trapif, 0);
     e.enc32_rec(trapff, rec_trapff, 0);
     e.enc64_rec(trapff, rec_trapff, 0);
+
+    let rec_br_catch = r.recipe("br_catch");
+
+    e.enc32_rec(br_catch, rec_br_catch, 0);
+    e.enc64_rec(br_catch, rec_br_catch, 0);
 }
 
 /// Reference type instructions.

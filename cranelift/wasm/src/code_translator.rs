@@ -538,7 +538,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::Try { ty } => {
             let (params, results) = blocktype_params_results(validator, *ty)?;
             let next = block_with_params(builder, results.clone(), environ)?;
-            state.push_try(next, params.len(), results.len());
+
+            // Generate landing pad with exception arg.
+            let catch_params = vec![]; //vec![wasmparser::Type::ExnRef];
+            let catch_block = block_with_params(builder, catch_params, environ)?;
+
+            state.push_try(next, params.len(), results.len(), catch_block);
         }
         Operator::Catch => {
             let i = state.control_stack.len() - 1;
@@ -546,26 +551,31 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 ControlStackFrame::Try {
                     destination,
                     num_return_values,
+                    catch_block,
                     ..
                 } => {
                     canonicalise_then_jump(builder, destination, state.peekn(num_return_values));
                     state.popn(num_return_values);
 
-                    // Generate landing pad with exception arg.
-                    let catch_params = vec![wasmparser::Type::ExnRef];
-                    let catch_block = block_with_params(builder, catch_params, environ)?;
+                    state.landing_pads_stack.pop();
+
                     builder.seal_block(catch_block);
                     builder.switch_to_block(catch_block);
 
-                    state.pushn(builder.block_params(catch_block));
+                    //builder.func.layout.mark_as_landing_pad(catch_block);
+
+                    //state.pushn(builder.block_params(catch_block));
+                    state.push1(
+                        builder
+                            .ins()
+                            .null(environ.reference_type(crate::WasmType::ExnRef)),
+                    );
                     state.reachable = true;
                 }
                 _ => unreachable!(),
             }
         }
-        | Operator::BrOnExn { .. }
-        | Operator::Throw { .. }
-        | Operator::Rethrow => {
+        Operator::BrOnExn { .. } | Operator::Throw { .. } | Operator::Rethrow => {
             return Err(wasm_unsupported!(
                 "proposed exception handling operator {:?}",
                 op
@@ -604,6 +614,10 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             );
             state.popn(num_args);
             state.pushn(inst_results);
+
+            if let Some(catch) = state.landing_pad() {
+                builder.ins().br_catch((), catch, &[]);
+            }
         }
         Operator::CallIndirect { index, table_index } => {
             // `index` is the index of the function's signature and `table_index` is the index of

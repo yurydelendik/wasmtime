@@ -74,6 +74,9 @@ pub(crate) struct Immediates {
 
     /// A code indicating the arithmetic operation to perform in an atomic_rmw memory access.
     pub atomic_rmw_op: OperandKind,
+
+    /// Catch condition.
+    pub catch: OperandKind,
 }
 
 fn new_imm(format_field_name: &'static str, rust_type: &'static str) -> OperandKind {
@@ -170,6 +173,7 @@ impl Immediates {
                 new_enum("op", "ir::AtomicRmwOp", atomic_rmw_op_values)
                     .with_doc("Atomic Read-Modify-Write Ops")
             },
+            catch: new_enum("void", "()", HashMap::new()).with_doc("An immediate."),
         }
     }
 }

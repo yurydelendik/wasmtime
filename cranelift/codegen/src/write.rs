@@ -575,6 +575,14 @@ pub fn write_operands(
             write!(w, " {} {}, {}", cond, args[0], destination)?;
             write_block_args(w, &args[1..])
         }
+        BranchCatch {
+            destination,
+            ref args,
+            ..
+        } => {
+            write!(w, " {}", destination)?;
+            write_block_args(w, args.as_slice(pool))
+        }
         BranchIcmp {
             cond,
             destination,

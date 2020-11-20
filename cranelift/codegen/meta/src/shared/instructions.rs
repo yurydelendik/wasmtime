@@ -178,6 +178,22 @@ fn define_control_flow(
     }
 
     {
+        let Void = &Operand::new("Void", &imm.catch);
+
+        ig.push(
+            Inst::new(
+                "br_catch",
+                r#"
+        Branch when condition if catch.
+        "#,
+                &formats.branch_catch,
+            )
+            .operands_in(vec![Void, block, args])
+            .is_branch(true),
+        );
+    }
+
+    {
         let x = &Operand::new("x", iB).with_doc("index into jump table");
         let JT = &Operand::new("JT", &entities.jump_table);
 

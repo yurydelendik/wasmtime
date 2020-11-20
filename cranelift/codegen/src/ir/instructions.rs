@@ -200,6 +200,11 @@ impl InstructionData {
                 destination,
                 ref args,
                 ..
+            }
+            | Self::BranchCatch {
+                destination,
+                ref args,
+                ..
             } => BranchInfo::SingleDest(destination, args.as_slice(pool)),
             Self::BranchInt {
                 destination,
@@ -242,6 +247,7 @@ impl InstructionData {
             | Self::Branch { destination, .. }
             | Self::BranchInt { destination, .. }
             | Self::BranchFloat { destination, .. }
+            | Self::BranchCatch { destination, .. }
             | Self::BranchIcmp { destination, .. } => Some(destination),
             Self::BranchTable { .. } | Self::IndirectJump { .. } => None,
             _ => {
@@ -270,6 +276,10 @@ impl InstructionData {
                 ..
             }
             | Self::BranchFloat {
+                ref mut destination,
+                ..
+            }
+            | Self::BranchCatch {
                 ref mut destination,
                 ..
             }

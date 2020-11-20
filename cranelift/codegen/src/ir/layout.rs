@@ -4,6 +4,7 @@
 //! determined by the `Layout` data structure defined in this module.
 
 use crate::entity::SecondaryMap;
+use crate::fx::FxHashSet;
 use crate::ir::dfg::DataFlowGraph;
 use crate::ir::progpoint::{ExpandedProgramPoint, ProgramOrder};
 use crate::ir::{Block, Inst};
@@ -41,6 +42,9 @@ pub struct Layout {
 
     /// Last block in the layout order, or `None` when no blocks have been laid out.
     last_block: Option<Block>,
+
+    /// Landing pads
+    landing_pads: FxHashSet<Block>,
 }
 
 impl Layout {
@@ -51,6 +55,7 @@ impl Layout {
             insts: SecondaryMap::new(),
             first_block: None,
             last_block: None,
+            landing_pads: FxHashSet::default(),
         }
     }
 
@@ -469,6 +474,21 @@ impl Layout {
     /// Get the block following `block` in the layout order.
     pub fn next_block(&self, block: Block) -> Option<Block> {
         self.blocks[block].next.expand()
+    }
+
+    /// Mark block as landing pad.
+    pub fn mark_as_landing_pad(&mut self, block: Block) {
+        self.landing_pads.insert(block);
+    }
+
+    /// Check if landing pad block.
+    pub fn is_landing_pad(&self, block: Block) -> bool {
+        self.landing_pads.contains(&block)
+    }
+
+    /// Get all landing pads.
+    pub fn landing_pads(&self) -> impl Iterator<Item = Block> + '_ {
+        self.landing_pads.iter().cloned()
     }
 }
 

@@ -3339,6 +3339,15 @@ pub(crate) fn define<'shared>(
         ),
     );
 
+    recipes.add_recipe(
+        EncodingRecipeBuilder::new("br_catch", &formats.branch_catch, 0)
+            .branch_range((1, 32))
+            .emit(
+                r#"
+                "#,
+            ),
+    );
+
     // Both `elf_tls_get_addr` and `macho_tls_get_addr` require all caller-saved registers to be spilled.
     // This is currently special cased in `regalloc/spilling.rs` in the `visit_inst` function.
 
