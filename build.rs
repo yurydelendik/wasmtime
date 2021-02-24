@@ -11,6 +11,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() -> anyhow::Result<()> {
+    // HACK just to run/link linking_foo
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    println!("cargo:rustc-link-search={}/examples/foo-wasm", manifest_dir);
+
     println!("cargo:rerun-if-changed=build.rs");
     let out_dir = PathBuf::from(
         env::var_os("OUT_DIR").expect("The OUT_DIR environment variable must be set"),

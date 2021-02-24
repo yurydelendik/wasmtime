@@ -259,6 +259,7 @@ pub struct ObjectBuilder<'a> {
     compilation: &'a CompiledFunctions,
     trampolines: Vec<(SignatureIndex, CompiledFunction)>,
     dwarf_sections: Vec<DwarfSection>,
+    meta: Vec<u8>,
 }
 
 impl<'a> ObjectBuilder<'a> {
@@ -274,6 +275,7 @@ impl<'a> ObjectBuilder<'a> {
             trampolines: Vec::new(),
             dwarf_sections: vec![],
             compilation,
+            meta: vec![],
         }
     }
 
@@ -287,6 +289,11 @@ impl<'a> ObjectBuilder<'a> {
         trampolines: Vec<(SignatureIndex, CompiledFunction)>,
     ) -> &mut Self {
         self.trampolines = trampolines;
+        self
+    }
+
+    pub fn set_meta(&mut self, meta: &[u8]) -> &mut Self {
+        self.meta = meta.to_vec();
         self
     }
 
@@ -377,6 +384,68 @@ impl<'a> ObjectBuilder<'a> {
             let section_id = obj.add_section(segment, name.as_bytes().to_vec(), SectionKind::Debug);
             dwarf_sections_ids.insert(name.to_string(), section_id);
             obj.append_section_data(section_id, &body, 1);
+        }
+
+        // Write metadata + func/trampoline table
+        {
+            let segment = obj
+                .segment_name(object::write::StandardSegment::Data)
+                .to_vec();
+            let meta_section_id =
+                obj.add_section(segment, b".wasm".to_vec(), object::SectionKind::Data);
+            let name = b"wasmtime_meta".to_vec();
+            let off = obj.append_section_data(
+                meta_section_id,
+                &(self.meta.len() as u64).to_le_bytes(),
+                1,
+            );
+            let off_ = obj.append_section_data(meta_section_id, &self.meta, 1);
+            let mut size = 8 + self.meta.len();
+            assert!(off + 8 == off_);
+
+            for (index, _) in self.compilation.into_iter() {
+                let off_ = obj.append_section_data(meta_section_id, &[0; 8], 1);
+                let func_index = module.func_index(index);
+                let target_symbol = func_symbols[func_index];
+                obj.add_relocation(
+                    meta_section_id,
+                    ObjectRelocation {
+                        offset: u64::from(off_),
+                        size: 64,
+                        kind: RelocationKind::Absolute,
+                        encoding: RelocationEncoding::Generic,
+                        symbol: target_symbol,
+                        addend: 0,
+                    },
+                )?;
+                size += 8;
+            }
+            for &target_symbol in trampolines.iter() {
+                let off_ = obj.append_section_data(meta_section_id, &[0; 8], 1);
+                obj.add_relocation(
+                    meta_section_id,
+                    ObjectRelocation {
+                        offset: u64::from(off_),
+                        size: 64,
+                        kind: RelocationKind::Absolute,
+                        encoding: RelocationEncoding::Generic,
+                        symbol: target_symbol,
+                        addend: 0,
+                    },
+                )?;
+                size += 8;
+            }
+
+            obj.add_symbol(Symbol {
+                name,
+                value: off,
+                size: size as u64,
+                kind: SymbolKind::Text,
+                scope: SymbolScope::Linkage,
+                weak: false,
+                section: SymbolSection::Section(meta_section_id),
+                flags: SymbolFlags::None,
+            });
         }
 
         let libcalls = write_libcall_symbols(&mut obj);

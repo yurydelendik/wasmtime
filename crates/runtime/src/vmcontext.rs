@@ -748,6 +748,14 @@ impl VMContext {
     pub unsafe fn host_state(&self) -> &dyn Any {
         self.instance().host_state()
     }
+
+    /// HACK
+    pub unsafe fn vmoffsets(&self) -> wasmtime_environ::VMOffsets {
+        use std::mem::size_of;
+        use wasmtime_environ::VMOffsets;
+        let module = self.instance().module();
+        VMOffsets::new(size_of::<*mut u8>() as u8, module)
+    }
 }
 
 /// Trampoline function pointer type.

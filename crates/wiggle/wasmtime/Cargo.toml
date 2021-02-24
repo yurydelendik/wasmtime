@@ -12,6 +12,8 @@ include = ["src/**/*", "LICENSE"]
 
 [dependencies]
 wasmtime = { path = "../../wasmtime", version = "0.25.0", default-features = false }
+wasmtime-runtime = { path = "../../runtime" }
+wasmtime-environ = { path = "../../environ" }
 wasmtime-wiggle-macro = { path = "./macro", version = "0.25.0" }
 witx = { version = "0.9.0", path = "../../wasi-common/WASI/tools/witx", optional = true }
 wiggle = { path = "..", version = "0.25.0" }

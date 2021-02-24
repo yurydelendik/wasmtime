@@ -3202,6 +3202,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmtime-aot-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "wasi-cap-std-sync",
+ "wasmtime-environ",
+ "wasmtime-jit",
+ "wasmtime-runtime",
+ "wasmtime-wasi",
+]
+
+[[package]]
 name = "wasmtime-bench-api"
 version = "0.19.0"
 dependencies = [
@@ -3287,6 +3300,7 @@ dependencies = [
  "tracing-subscriber",
  "wasmparser",
  "wasmtime",
+ "wasmtime-aot-runtime",
  "wasmtime-cache",
  "wasmtime-debug",
  "wasmtime-environ",
@@ -3397,6 +3411,7 @@ version = "0.25.0"
 dependencies = [
  "addr2line",
  "anyhow",
+ "bincode",
  "cfg-if 1.0.0",
  "cranelift-codegen",
  "cranelift-entity",
@@ -3561,6 +3576,8 @@ dependencies = [
  "anyhow",
  "proptest",
  "wasmtime",
+ "wasmtime-environ",
+ "wasmtime-runtime",
  "wasmtime-wiggle-macro",
  "wiggle",
  "wiggle-borrow",

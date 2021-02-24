@@ -134,6 +134,7 @@ impl Compiler {
         &self,
         translation: &mut ModuleTranslation,
         types: &TypeTables,
+        build_elf: bool,
     ) -> Result<Compilation, SetupError> {
         let functions = mem::take(&mut translation.function_body_inputs);
         let functions = functions.into_iter().collect::<Vec<_>>();
@@ -163,8 +164,14 @@ impl Compiler {
             vec![]
         };
 
-        let (obj, unwind_info) =
-            build_object(&*self.isa, &translation, types, &funcs, dwarf_sections)?;
+        let (obj, unwind_info) = build_object(
+            &*self.isa,
+            &translation,
+            types,
+            &funcs,
+            dwarf_sections,
+            build_elf,
+        )?;
 
         Ok(Compilation {
             obj,

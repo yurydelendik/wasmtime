@@ -117,7 +117,7 @@ impl CompilationArtifacts {
                     obj,
                     unwind_info,
                     funcs,
-                } = compiler.compile(&mut translation, &types)?;
+                } = compiler.compile(&mut translation, &types, true)?;
 
                 let ModuleTranslation {
                     mut module,
@@ -219,6 +219,57 @@ impl CompiledModule {
         maybe_parallel!(artifacts.(into_iter | into_par_iter))
             .map(|a| CompiledModule::from_artifacts(a, isa, profiler))
             .collect()
+    }
+
+    /// HACK
+    pub fn from_raw_parts(
+        module: Module,
+        funcs_ptrs: Vec<*const u8>,
+        trampolines_ptrs: Vec<*const u8>,
+    ) -> Result<Arc<Self>, SetupError> {
+        let code_memory = CodeMemory::new();
+        //let data_initializers = &module.memory_initialization;
+        let mut finished_functions: PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]> =
+            PrimaryMap::with_capacity(funcs_ptrs.len());
+        let mut funcs: PrimaryMap<DefinedFuncIndex, FunctionInfo> =
+            PrimaryMap::with_capacity(funcs_ptrs.len());
+        for ptr in funcs_ptrs {
+            let byte_ptr: *mut [u8] = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, 8) };
+            let body_ptr = byte_ptr as *mut [VMFunctionBody];
+            let ptr: *mut [VMFunctionBody] = unsafe { &mut *body_ptr };
+            finished_functions.push(ptr);
+            funcs.push(FunctionInfo {
+                traps: vec![], // Vec<TrapInformation>,
+                address_map: FunctionAddressMap::default(),
+                stack_maps: vec![], // Vec<StackMapInformation>,
+            });
+        }
+        let mut trampolines: PrimaryMap<SignatureIndex, VMTrampoline> =
+            PrimaryMap::with_capacity(trampolines_ptrs.len());
+        for ptr in trampolines_ptrs {
+            trampolines.push(unsafe { std::mem::transmute(ptr) });
+        }
+
+        let finished_functions = FinishedFunctions(finished_functions);
+        let artifacts = CompilationArtifacts {
+            module: Arc::new(module),
+            obj: vec![].into_boxed_slice(),
+            unwind_info: vec![].into_boxed_slice(),
+            funcs,
+            native_debug_info_present: false,
+            has_unparsed_debuginfo: false,
+            debug_info: None,
+        };
+
+        Ok(Arc::new(Self {
+            artifacts,
+            code: Arc::new(ModuleCode {
+                code_memory,
+                dbg_jit_registration: None,
+            }),
+            finished_functions,
+            trampolines,
+        }))
     }
 
     /// Creates `CompiledModule` directly from `CompilationArtifacts`.

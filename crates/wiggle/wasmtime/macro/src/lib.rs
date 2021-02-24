@@ -120,6 +120,55 @@ fn generate_module(
         );
     }
 
+    let raw_exports = module.funcs().map(|f| {
+        let func_name = Ident::new(
+            &format!("_raw_{}_{}", module_id, f.name.as_str()),
+            Span::call_site(),
+        );
+
+        let (params, results) = f.wasm_signature();
+
+        let arg_names = (0..params.len())
+            .map(|i| Ident::new(&format!("arg{}", i), Span::call_site()))
+            .collect::<Vec<_>>();
+        let arg_decls = params.iter().enumerate().map(|(i, ty)| {
+            let name = &arg_names[i];
+            let wasm = names.wasm_type(*ty);
+            quote! { #name: #wasm }
+        });
+
+        let ret_ty = match results.len() {
+            0 => quote!(()),
+            1 => names.wasm_type(results[0]),
+            _ => unimplemented!(),
+        };
+
+        let runtime = names.runtime_mod();
+        let name_ident = names.func(&f.name);
+
+        quote! {
+            #[no_mangle]
+            pub extern "C" fn #func_name(
+                ctx: *mut u8,
+                caller_ctx: *mut u8,
+                #(#arg_decls,)*
+            ) -> #ret_ty {
+                let host_state = unsafe { #runtime::get_host_state(ctx) };
+                let cx = host_state
+                    .downcast_ref::<std::rc::Rc<std::cell::RefCell<#ctx_type>>>()
+                    .unwrap();
+                let mem = unsafe { #runtime::WasmtimeGuestMemory0::from_raw(caller_ctx) };
+                let cx = &mut *cx.borrow_mut();
+                let result = #target_module::#name_ident(
+                    cx,
+                    &mem,
+                    #(#arg_names),*
+                );
+                result.unwrap().into()
+            }
+        }
+    });
+
     let type_name = module_conf.name.clone();
     let type_docs = module_conf
         .docs
@@ -220,6 +269,8 @@ contained in the `cx` parameter.",
 
             #(#fns)*
         }
+
+        #(#raw_exports)*
     }
 }
 

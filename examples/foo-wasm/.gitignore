@@ -1,0 +1,4 @@
+foo.o
+foo.wasm
+foo.wat
+libfoo.a

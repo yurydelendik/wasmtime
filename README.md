@@ -1,3 +1,21 @@
+# AOT experiment
+
+## Build examples/foo-wasm/libfoo.a
+
+```bash
+cd examples/foo-wasm/
+# check if build_foo.sh has correct wasi-sdk clang location
+./build_foo.sh
+```
+
+## Run example
+
+```
+cargo run --example linking_foo
+```
+
+<hr>
+
 <div align="center">
   <h1><code>wasmtime</code></h1>
 

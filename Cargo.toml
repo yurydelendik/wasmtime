@@ -54,6 +54,7 @@ tempfile = "3.1.0"
 test-programs = { path = "crates/test-programs" }
 wasmtime-fuzzing = { path = "crates/fuzzing" }
 wasmtime-runtime = { path = "crates/runtime" }
+wasmtime-aot-runtime = { path = "crates/aot-runtime" }
 tracing-subscriber = "0.2.16"
 wast = "35.0.0"
 
@@ -67,6 +68,7 @@ opt-level = 0
 resolver = '2'
 members = [
   "cranelift",
+  "crates/aot-runtime",
   "crates/bench-api",
   "crates/c-api",
   "crates/fuzzing",

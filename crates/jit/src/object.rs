@@ -20,6 +20,17 @@ pub enum ObjectUnwindInfo {
     Trampoline(SignatureIndex, UnwindInfo),
 }
 
+fn serialize_module_meta(translation: &ModuleTranslation) -> Result<Vec<u8>, anyhow::Error> {
+    use bincode::Options;
+
+    let ModuleTranslation { module, .. } = translation;
+
+    let data = bincode::DefaultOptions::new()
+        .with_varint_encoding()
+        .serialize(&module)?;
+    Ok(data)
+}
+
 // Builds ELF image from the module `Compilation`.
 pub(crate) fn build_object(
     isa: &dyn TargetIsa,
@@ -27,6 +38,7 @@ pub(crate) fn build_object(
     types: &TypeTables,
     funcs: &CompiledFunctions,
     dwarf_sections: Vec<DwarfSection>,
+    build_elf: bool,
 ) -> Result<(Object, Vec<ObjectUnwindInfo>), anyhow::Error> {
     const CODE_SECTION_ALIGNMENT: u64 = 0x1000;
 
@@ -61,12 +73,17 @@ pub(crate) fn build_object(
         trampolines.push((i, func));
     }
 
-    let target = ObjectBuilderTarget::new(isa.triple().architecture)?;
+    let target = if build_elf {
+        ObjectBuilderTarget::new(isa.triple().architecture)?
+    } else {
+        ObjectBuilderTarget::from_triple(isa.triple())?
+    };
     let mut builder = ObjectBuilder::new(target, &translation.module, funcs);
     builder
         .set_code_alignment(CODE_SECTION_ALIGNMENT)
         .set_trampolines(trampolines)
-        .set_dwarf_sections(dwarf_sections);
+        .set_dwarf_sections(dwarf_sections)
+        .set_meta(&serialize_module_meta(translation)?);
     let obj = builder.build()?;
 
     Ok((obj, unwind_info))
