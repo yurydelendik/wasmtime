@@ -33,13 +33,15 @@ fn main() -> Result<()> {
     let compiled_module = read_compiled_module(get_linked_wasm_meta())?;
 
     let instance = instantiate(&compiled_module, &wasi_ctx)?;
+    let instance_ctx = instance.vmctx_ptr();
 
     let run_index = instance.exports().find(|e| e.0 == "bar").unwrap().1;
-    let run_exp: (*const VMFunctionBody, *mut VMContext) = unsafe {
+    let run_fn_ptr: *const VMFunctionBody = unsafe {
         match instance.lookup_by_declaration(run_index) {
             Export::Function(ef) => {
                 let r = ef.anyfunc.as_ref();
-                (r.func_ptr.as_ptr(), r.vmctx)
+                assert!(instance_ctx == r.vmctx);
+                r.func_ptr.as_ptr()
             }
             _ => panic!(),
         }
@@ -55,9 +57,9 @@ fn main() -> Result<()> {
         .expect("table grown");
 
     type RunFn = extern "C" fn(*mut VMContext, *mut VMContext, i32, i32) -> i32;
-    let run: RunFn = unsafe { std::mem::transmute(run_exp.0) };
+    let run: RunFn = unsafe { std::mem::transmute(run_fn_ptr) };
 
-    let res = run(run_exp.1, std::ptr::null_mut(), 2, callb_idx as i32);
+    let res = run(instance_ctx, std::ptr::null_mut(), 2, callb_idx as i32);
     println!("{}", res);
 
     if let Export::Memory(m) =
