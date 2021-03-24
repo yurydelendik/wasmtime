@@ -79,11 +79,14 @@ pub(crate) fn build_object(
         ObjectBuilderTarget::from_triple(isa.triple())?
     };
     let mut builder = ObjectBuilder::new(target, &translation.module, funcs);
+    if build_elf {
+        builder.set_code_alignment(CODE_SECTION_ALIGNMENT);
+    } else {
+        builder.set_meta(&serialize_module_meta(translation)?);
+    }
     builder
-        .set_code_alignment(CODE_SECTION_ALIGNMENT)
         .set_trampolines(trampolines)
-        .set_dwarf_sections(dwarf_sections)
-        .set_meta(&serialize_module_meta(translation)?);
+        .set_dwarf_sections(dwarf_sections);
     let obj = builder.build()?;
 
     Ok((obj, unwind_info))

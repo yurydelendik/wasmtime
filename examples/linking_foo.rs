@@ -27,6 +27,13 @@ fn get_linked_wasm_meta() -> *const u8 {
     unsafe { &wasmtime_meta }
 }
 
+#[link(name = "foo", kind = "static")]
+#[allow(improper_ctypes)]
+extern "C" {
+    fn _wasm_function_4(vmctx: *mut VMContext, caller_vmctx: *mut VMContext, a: i32, c: i32)
+        -> i32;
+}
+
 fn main() -> Result<()> {
     let wasi_ctx = WasiCtxData::new()?;
 
@@ -34,18 +41,6 @@ fn main() -> Result<()> {
 
     let instance = instantiate(&compiled_module, &wasi_ctx)?;
     let instance_ctx = instance.vmctx_ptr();
-
-    let run_index = instance.exports().find(|e| e.0 == "bar").unwrap().1;
-    let run_fn_ptr: *const VMFunctionBody = unsafe {
-        match instance.lookup_by_declaration(run_index) {
-            Export::Function(ef) => {
-                let r = ef.anyfunc.as_ref();
-                assert!(instance_ctx == r.vmctx);
-                r.func_ptr.as_ptr()
-            }
-            _ => panic!(),
-        }
-    };
 
     let mut callb_fn = VMCallerCheckedAnyfunc {
         func_ptr: NonNull::new(callb as *const VMFunctionBody as *mut _).unwrap(),
@@ -56,10 +51,7 @@ fn main() -> Result<()> {
         .table_grow(TableIndex::new(0), 1, TableElement::FuncRef(&mut callb_fn))
         .expect("table grown");
 
-    type RunFn = extern "C" fn(*mut VMContext, *mut VMContext, i32, i32) -> i32;
-    let run: RunFn = unsafe { std::mem::transmute(run_fn_ptr) };
-
-    let res = run(instance_ctx, std::ptr::null_mut(), 2, callb_idx as i32);
+    let res = unsafe { _wasm_function_4(instance_ctx, std::ptr::null_mut(), 2, callb_idx as i32) };
     println!("{}", res);
 
     if let Export::Memory(m) =

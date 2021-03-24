@@ -344,7 +344,7 @@ impl<'a> ObjectBuilder<'a> {
                 value: off,
                 size: func.body.len() as u64,
                 kind: SymbolKind::Text,
-                scope: SymbolScope::Compilation,
+                scope: SymbolScope::Linkage,
                 weak: false,
                 section: SymbolSection::Section(section_id),
                 flags: SymbolFlags::None,
