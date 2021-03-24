@@ -2,7 +2,7 @@ use anyhow::Result;
 use wasi_cap_std_sync::WasiCtxBuilder;
 
 use wasmtime_environ::wasm::{EntityType, SignatureIndex};
-use wasmtime_environ::{entity::EntityRef, Initializer, Module};
+use wasmtime_environ::{entity::EntityRef, Initializer, Module, TypeTables};
 use wasmtime_jit::CompiledModule;
 use wasmtime_runtime::{
     Imports, InstanceAllocationRequest, InstanceAllocator, InstanceHandle,
@@ -16,7 +16,9 @@ use std::ptr::{self, NonNull};
 use std::rc::Rc;
 use wasmtime_wasi::snapshots::preview_1;
 
-pub fn read_compiled_module(meta_ptr: *const u8) -> Result<std::sync::Arc<CompiledModule>> {
+pub fn read_compiled_module(
+    meta_ptr: *const u8,
+) -> Result<(std::sync::Arc<CompiledModule>, TypeTables)> {
     let (meta_data, func_ptrs) = unsafe {
         let meta_len = ptr::read(meta_ptr as *const u64);
         (
@@ -25,9 +27,9 @@ pub fn read_compiled_module(meta_ptr: *const u8) -> Result<std::sync::Arc<Compil
         )
     };
 
-    let module = bincode::DefaultOptions::new()
+    let (module, types) = bincode::DefaultOptions::new()
         .with_varint_encoding()
-        .deserialize::<Module>(meta_data)?;
+        .deserialize::<(Module, TypeTables)>(meta_data)?;
 
     let (funcs, trampolines) = unsafe {
         let def_functions_len = module.functions.len() - module.num_imported_funcs;
@@ -46,7 +48,7 @@ pub fn read_compiled_module(meta_ptr: *const u8) -> Result<std::sync::Arc<Compil
     };
 
     let compiled_module = CompiledModule::from_raw_parts(module, funcs, trampolines)?;
-    Ok(compiled_module)
+    Ok((compiled_module, types))
 }
 
 pub struct WasiCtxData(Box<dyn std::any::Any + 'static>);

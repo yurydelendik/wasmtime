@@ -227,6 +227,7 @@ impl CompiledModule {
         funcs_ptrs: Vec<*const u8>,
         trampolines_ptrs: Vec<*const u8>,
     ) -> Result<Arc<Self>, SetupError> {
+        use wasmtime_environ::entity::EntityRef;
         let code_memory = CodeMemory::new();
         //let data_initializers = &module.memory_initialization;
         let mut finished_functions: PrimaryMap<DefinedFuncIndex, *mut [VMFunctionBody]> =
@@ -244,10 +245,10 @@ impl CompiledModule {
                 stack_maps: vec![], // Vec<StackMapInformation>,
             });
         }
-        let mut trampolines: PrimaryMap<SignatureIndex, VMTrampoline> =
-            PrimaryMap::with_capacity(trampolines_ptrs.len());
-        for ptr in trampolines_ptrs {
-            trampolines.push(unsafe { std::mem::transmute(ptr) });
+        let mut trampolines: Vec<(SignatureIndex, VMTrampoline)> =
+            Vec::with_capacity(trampolines_ptrs.len());
+        for (i, ptr) in trampolines_ptrs.iter().enumerate() {
+            trampolines.push((SignatureIndex::new(i), unsafe { std::mem::transmute(ptr) }));
         }
 
         let finished_functions = FinishedFunctions(finished_functions);

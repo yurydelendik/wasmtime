@@ -20,14 +20,17 @@ pub enum ObjectUnwindInfo {
     Trampoline(SignatureIndex, UnwindInfo),
 }
 
-fn serialize_module_meta(translation: &ModuleTranslation) -> Result<Vec<u8>, anyhow::Error> {
+fn serialize_module_meta(
+    translation: &ModuleTranslation,
+    types: &TypeTables,
+) -> Result<Vec<u8>, anyhow::Error> {
     use bincode::Options;
 
     let ModuleTranslation { module, .. } = translation;
 
     let data = bincode::DefaultOptions::new()
         .with_varint_encoding()
-        .serialize(&module)?;
+        .serialize(&(module, types))?;
     Ok(data)
 }
 
@@ -82,7 +85,7 @@ pub(crate) fn build_object(
     if build_elf {
         builder.set_code_alignment(CODE_SECTION_ALIGNMENT);
     } else {
-        builder.set_meta(&serialize_module_meta(translation)?);
+        builder.set_meta(&serialize_module_meta(translation, types)?);
     }
     builder
         .set_trampolines(trampolines)

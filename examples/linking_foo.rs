@@ -2,7 +2,8 @@ use anyhow::Result;
 use std::ptr::NonNull;
 use wasmtime_aot_runtime::{instantiate, read_compiled_module, WasiCtxData};
 use wasmtime_environ::entity::EntityRef;
-use wasmtime_environ::wasm::{EntityIndex, MemoryIndex, TableIndex};
+use wasmtime_environ::wasm::{EntityIndex, MemoryIndex, TableIndex, WasmFuncType, WasmType};
+use wasmtime_environ::TypeTables;
 use wasmtime_runtime::{
     Export, InstanceHandle, TableElement, VMCallerCheckedAnyfunc, VMContext, VMFunctionBody,
     VMSharedSignatureIndex,
@@ -34,17 +35,32 @@ extern "C" {
         -> i32;
 }
 
+fn lookup_type_index(types: &TypeTables, ty: WasmFuncType) -> VMSharedSignatureIndex {
+    for (i, c) in types.wasm_signatures.iter() {
+        if c == &ty {
+            return VMSharedSignatureIndex::new(i.index() as u32);
+        }
+    }
+    panic!("type index not found for {:?}", ty);
+}
+
 fn main() -> Result<()> {
     let wasi_ctx = WasiCtxData::new()?;
 
-    let compiled_module = read_compiled_module(get_linked_wasm_meta())?;
+    let (compiled_module, types) = read_compiled_module(get_linked_wasm_meta())?;
 
     let instance = instantiate(&compiled_module, &wasi_ctx)?;
     let instance_ctx = instance.vmctx_ptr();
 
     let mut callb_fn = VMCallerCheckedAnyfunc {
         func_ptr: NonNull::new(callb as *const VMFunctionBody as *mut _).unwrap(),
-        type_index: VMSharedSignatureIndex::new(0),
+        type_index: lookup_type_index(
+            &types,
+            WasmFuncType {
+                params: Box::new([WasmType::I32]),
+                returns: Box::new([WasmType::I32]),
+            },
+        ),
         vmctx: std::ptr::null_mut(),
     };
     let callb_idx = instance
