@@ -23,16 +23,15 @@ extern "C" fn callb(_vmctx: *mut VMContext, caller_vmctx: *mut VMContext, i: i32
 fn get_linked_wasm_meta() -> *const u8 {
     #[link(name = "foo", kind = "static")]
     extern "C" {
-        static wasmtime_meta: u8;
+        static aot_wasmtime_meta: u8;
     }
-    unsafe { &wasmtime_meta }
+    unsafe { &aot_wasmtime_meta }
 }
 
 #[link(name = "foo", kind = "static")]
 #[allow(improper_ctypes)]
 extern "C" {
-    fn _wasm_function_4(vmctx: *mut VMContext, caller_vmctx: *mut VMContext, a: i32, c: i32)
-        -> i32;
+    fn aot_bar(vmctx: *mut VMContext, caller_vmctx: *mut VMContext, a: i32, c: i32) -> i32;
 }
 
 fn lookup_type_index(types: &TypeTables, ty: WasmFuncType) -> VMSharedSignatureIndex {
@@ -67,7 +66,7 @@ fn main() -> Result<()> {
         .table_grow(TableIndex::new(0), 1, TableElement::FuncRef(&mut callb_fn))
         .expect("table grown");
 
-    let res = unsafe { _wasm_function_4(instance_ctx, std::ptr::null_mut(), 2, callb_idx as i32) };
+    let res = unsafe { aot_bar(instance_ctx, std::ptr::null_mut(), 2, callb_idx as i32) };
     println!("{}", res);
 
     if let Export::Memory(m) =

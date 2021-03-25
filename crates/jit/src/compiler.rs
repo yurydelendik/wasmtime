@@ -1,7 +1,7 @@
 //! JIT compilation.
 
 use crate::instantiate::SetupError;
-use crate::object::{build_object, ObjectUnwindInfo};
+use crate::object::{build_object, ObjectMetadataFormat, ObjectUnwindInfo};
 use object::write::Object;
 #[cfg(feature = "parallel-compilation")]
 use rayon::prelude::*;
@@ -134,7 +134,7 @@ impl Compiler {
         &self,
         translation: &mut ModuleTranslation,
         types: &TypeTables,
-        build_elf: bool,
+        artifact_format: ObjectMetadataFormat,
     ) -> Result<Compilation, SetupError> {
         let functions = mem::take(&mut translation.function_body_inputs);
         let functions = functions.into_iter().collect::<Vec<_>>();
@@ -170,7 +170,7 @@ impl Compiler {
             types,
             &funcs,
             dwarf_sections,
-            build_elf,
+            artifact_format,
         )?;
 
         Ok(Compilation {

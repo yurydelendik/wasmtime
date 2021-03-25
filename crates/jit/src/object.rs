@@ -20,6 +20,20 @@ pub enum ObjectUnwindInfo {
     Trampoline(SignatureIndex, UnwindInfo),
 }
 
+/// Additional metadata serialized with object file.
+#[derive(Debug, Clone)]
+pub enum ObjectMetadataFormat<'a> {
+    /// JIT ELF object file/image.
+    JIT,
+    /// Serializable and linkable object file.
+    AOT {
+        /// Prefix for symbols.
+        prefix: &'a str,
+        /// Use names from the name section or from exports.
+        use_debug_names: bool,
+    },
+}
+
 fn serialize_module_meta(
     translation: &ModuleTranslation,
     types: &TypeTables,
@@ -41,7 +55,7 @@ pub(crate) fn build_object(
     types: &TypeTables,
     funcs: &CompiledFunctions,
     dwarf_sections: Vec<DwarfSection>,
-    build_elf: bool,
+    format: ObjectMetadataFormat,
 ) -> Result<(Object, Vec<ObjectUnwindInfo>), anyhow::Error> {
     const CODE_SECTION_ALIGNMENT: u64 = 0x1000;
 
@@ -76,16 +90,25 @@ pub(crate) fn build_object(
         trampolines.push((i, func));
     }
 
-    let target = if build_elf {
+    let target = if let ObjectMetadataFormat::JIT = format {
         ObjectBuilderTarget::new(isa.triple().architecture)?
     } else {
         ObjectBuilderTarget::from_triple(isa.triple())?
     };
     let mut builder = ObjectBuilder::new(target, &translation.module, funcs);
-    if build_elf {
-        builder.set_code_alignment(CODE_SECTION_ALIGNMENT);
-    } else {
-        builder.set_meta(&serialize_module_meta(translation, types)?);
+    match format {
+        ObjectMetadataFormat::JIT => {
+            builder.set_code_alignment(CODE_SECTION_ALIGNMENT);
+        }
+        ObjectMetadataFormat::AOT {
+            prefix,
+            use_debug_names,
+        } => {
+            builder
+                .set_prefix(prefix)
+                .set_use_debug_names(use_debug_names)
+                .set_meta(&serialize_module_meta(translation, types)?);
+        }
     }
     builder
         .set_trampolines(trampolines)

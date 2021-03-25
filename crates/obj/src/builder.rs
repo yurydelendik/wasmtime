@@ -252,6 +252,12 @@ impl ObjectBuilderTarget {
     }
 }
 
+fn prepend_prefix(prefix: &[u8], name: &[u8]) -> Vec<u8> {
+    let mut result = prefix.to_vec();
+    result.extend(name);
+    result
+}
+
 pub struct ObjectBuilder<'a> {
     target: ObjectBuilderTarget,
     module: &'a Module,
@@ -260,6 +266,8 @@ pub struct ObjectBuilder<'a> {
     trampolines: Vec<(SignatureIndex, CompiledFunction)>,
     dwarf_sections: Vec<DwarfSection>,
     meta: Vec<u8>,
+    prefix: Vec<u8>,
+    use_debug_names: bool,
 }
 
 impl<'a> ObjectBuilder<'a> {
@@ -276,6 +284,8 @@ impl<'a> ObjectBuilder<'a> {
             dwarf_sections: vec![],
             compilation,
             meta: vec![],
+            prefix: vec![],
+            use_debug_names: false,
         }
     }
 
@@ -302,6 +312,16 @@ impl<'a> ObjectBuilder<'a> {
         self
     }
 
+    pub fn set_prefix(&mut self, prefix: &str) -> &mut Self {
+        self.prefix = prefix.as_bytes().to_vec();
+        self
+    }
+
+    pub fn set_use_debug_names(&mut self, use_debug_names: bool) -> &mut Self {
+        self.use_debug_names = use_debug_names;
+        self
+    }
+
     pub fn build(self) -> Result<Object, anyhow::Error> {
         let mut obj = Object::new(
             self.target.binary_format,
@@ -323,9 +343,10 @@ impl<'a> ObjectBuilder<'a> {
         let mut func_symbols = PrimaryMap::with_capacity(self.compilation.len());
         for index in 0..module.num_imported_funcs {
             let symbol_id = obj.add_symbol(Symbol {
-                name: utils::func_symbol_name(FuncIndex::new(index))
-                    .as_bytes()
-                    .to_vec(),
+                name: prepend_prefix(
+                    &self.prefix,
+                    utils::func_symbol_name(FuncIndex::new(index)).as_bytes(),
+                ),
                 value: 0,
                 size: 0,
                 kind: SymbolKind::Text,
@@ -358,15 +379,20 @@ impl<'a> ObjectBuilder<'a> {
 
         // Create symbols and section data for the compiled functions.
         for (index, func) in self.compilation.iter() {
-            let name = utils::func_symbol_name(module.func_index(index))
-                .as_bytes()
-                .to_vec();
+            let index = module.func_index(index);
+            let maybe_debug_name =
+                if self.use_debug_names && self.module.func_names.contains_key(&index) {
+                    self.module.func_names[&index].clone()
+                } else {
+                    utils::func_symbol_name(index)
+                };
+            let name = prepend_prefix(&self.prefix, maybe_debug_name.as_bytes());
             let symbol_id = append_func(name, func);
             func_symbols.push(symbol_id);
         }
         let mut trampolines = Vec::new();
         for (i, func) in self.trampolines.iter() {
-            let name = utils::trampoline_symbol_name(*i).as_bytes().to_vec();
+            let name = prepend_prefix(&self.prefix, utils::trampoline_symbol_name(*i).as_bytes());
             trampolines.push(append_func(name, func));
         }
 
@@ -393,7 +419,7 @@ impl<'a> ObjectBuilder<'a> {
                 .to_vec();
             let meta_section_id =
                 obj.add_section(segment, b".wasm".to_vec(), object::SectionKind::Data);
-            let name = b"wasmtime_meta".to_vec();
+            let name = prepend_prefix(&self.prefix, b"wasmtime_meta");
             let off = obj.append_section_data(
                 meta_section_id,
                 &(self.meta.len() as u64).to_le_bytes(),
