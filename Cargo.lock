@@ -3207,6 +3207,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "psm",
  "wasi-cap-std-sync",
  "wasmtime-environ",
  "wasmtime-jit",

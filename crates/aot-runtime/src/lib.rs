@@ -51,30 +51,48 @@ pub fn read_compiled_module(
     Ok((compiled_module, types))
 }
 
-pub struct WasiCtxData(Box<dyn std::any::Any + 'static>);
+pub struct AotEnvironment {
+    ints: Box<VMInterrupts>,
+    wasi: Box<dyn std::any::Any + 'static>,
+}
 
-impl WasiCtxData {
+impl AotEnvironment {
     pub fn new() -> Result<Self> {
-        let wasi_ctx0: Box<dyn std::any::Any + 'static> = Box::new(Rc::new(RefCell::new(
+        use std::sync::atomic::Ordering::SeqCst;
+
+        const MAX_WASM_STACK: usize = 1 << 20;
+
+        let ints = Box::new(VMInterrupts::default());
+        let stack_pointer = psm::stack_pointer() as usize;
+        let wasm_stack_limit = stack_pointer - MAX_WASM_STACK;
+        ints.stack_limit.store(wasm_stack_limit, SeqCst);
+
+        let wasi: Box<dyn std::any::Any + 'static> = Box::new(Rc::new(RefCell::new(
             WasiCtxBuilder::new()
                 .inherit_stdio()
                 .inherit_args()?
                 .build()?,
         )));
-        Ok(Self(wasi_ctx0))
+
+        Ok(AotEnvironment { ints, wasi })
     }
-    pub fn ptr(&self) -> *const u8 {
-        &self.0 as *const Box<_> as *const u8
+
+    fn ints_ptr(&self) -> *const VMInterrupts {
+        self.ints.as_ref()
+    }
+
+    fn wasi_ptr(&self) -> *const u8 {
+        &self.wasi as *const Box<_> as *const u8
     }
 }
 
 pub fn instantiate(
+    env: &AotEnvironment,
     compiled_module: &CompiledModule,
-    wasi_ctx: &WasiCtxData,
 ) -> Result<InstanceHandle> {
     // HACK masking the above Box as VMContext
     // Raw generated function (see comment below) will know how to handle it
-    let wasi_ctx0_ptr = wasi_ctx.ptr();
+    let wasi_ctx0_ptr = env.wasi_ptr();
 
     let mut import_functions = Vec::new();
     for imp in compiled_module.module().initializers.iter() {
@@ -115,7 +133,6 @@ pub fn instantiate(
         memories: &[],
         globals: &[],
     };
-    let ints = VMInterrupts::default();
 
     unsafe {
         let allocator = OnDemandInstanceAllocator::new(None, /* stack_size = */ 0);
@@ -126,7 +143,7 @@ pub fn instantiate(
             imports,
             lookup_shared_signature: &lookup_shared_signature,
             host_state: Box::new(()),
-            interrupts: &ints,
+            interrupts: env.ints.as_ref(),
             externref_activations_table: &mut externref_activations_table,
             stack_map_registry: &mut stack_map_registry,
         })?;

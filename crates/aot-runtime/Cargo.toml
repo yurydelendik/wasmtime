@@ -14,3 +14,4 @@ wasmtime-wasi = { path = "../wasi", version = "0.25.0" }
 wasi-cap-std-sync = { path = "../wasi-common/cap-std-sync", version = "0.25.0" }
 anyhow = "1.0.19"
 bincode = "1.2.1"
+psm = "0.1.11"
