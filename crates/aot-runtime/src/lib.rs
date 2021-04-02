@@ -89,6 +89,7 @@ impl AotEnvironment {
 pub fn instantiate(
     env: &AotEnvironment,
     compiled_module: &CompiledModule,
+    lookup_shared_signature: &dyn Fn(SignatureIndex) -> VMSharedSignatureIndex,
 ) -> Result<InstanceHandle> {
     // HACK masking the above Box as VMContext
     // Raw generated function (see comment below) will know how to handle it
@@ -121,9 +122,6 @@ pub fn instantiate(
             });
         }
     }
-    let lookup_shared_signature = |sig: SignatureIndex| -> VMSharedSignatureIndex {
-        VMSharedSignatureIndex::new(sig.index() as u32)
-    };
     let mut externref_activations_table = VMExternRefActivationsTable::new();
     let mut stack_map_registry = StackMapRegistry::default();
 

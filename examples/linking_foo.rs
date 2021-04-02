@@ -2,7 +2,9 @@ use anyhow::Result;
 use std::ptr::NonNull;
 use wasmtime_aot_runtime::{instantiate, read_compiled_module, AotEnvironment};
 use wasmtime_environ::entity::EntityRef;
-use wasmtime_environ::wasm::{EntityIndex, MemoryIndex, TableIndex, WasmFuncType, WasmType};
+use wasmtime_environ::wasm::{
+    EntityIndex, MemoryIndex, SignatureIndex, TableIndex, WasmFuncType, WasmType,
+};
 use wasmtime_environ::TypeTables;
 use wasmtime_runtime::{
     Export, InstanceHandle, TableElement, VMCallerCheckedAnyfunc, VMContext, VMFunctionBody,
@@ -46,8 +48,12 @@ fn lookup_type_index(types: &TypeTables, ty: WasmFuncType) -> VMSharedSignatureI
 fn main() -> Result<()> {
     let (compiled_module, types) = read_compiled_module(get_linked_wasm_meta())?;
 
+    let lookup_shared_signature = |sig: SignatureIndex| -> VMSharedSignatureIndex {
+        VMSharedSignatureIndex::new(sig.index() as u32)
+    };
+
     let env = AotEnvironment::new()?;
-    let instance = instantiate(&env, &compiled_module)?;
+    let instance = instantiate(&env, &compiled_module, &lookup_shared_signature)?;
     let instance_ctx = instance.vmctx_ptr();
 
     let mut callb_fn = VMCallerCheckedAnyfunc {
