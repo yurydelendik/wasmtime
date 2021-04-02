@@ -37,13 +37,13 @@ fn to_object_relocations<'a>(
     it: impl Iterator<Item = &'a Relocation> + 'a,
     off: u64,
     module: &'a Module,
-    funcs: &'a PrimaryMap<FuncIndex, SymbolId>,
+    funcs: &'a PrimaryMap<FuncIndex, Option<SymbolId>>,
     libcalls: &'a HashMap<LibCall, SymbolId>,
     compiled_funcs: &'a CompiledFunctions,
 ) -> impl Iterator<Item = ObjectRelocation> + 'a {
     it.filter_map(move |r| {
         let (symbol, symbol_offset) = match r.reloc_target {
-            RelocationTarget::UserFunc(index) => (funcs[index], 0),
+            RelocationTarget::UserFunc(index) => (funcs[index].unwrap(), 0),
             RelocationTarget::LibCall(call) => (libcalls[&call], 0),
             RelocationTarget::JumpTable(f, jt) => {
                 let df = module.defined_func_index(f).unwrap();
@@ -51,7 +51,7 @@ fn to_object_relocations<'a>(
                     .get(df)
                     .and_then(|f| f.jt_offsets.get(jt))
                     .expect("func jump table");
-                (funcs[f], offset)
+                (funcs[f].unwrap(), offset)
             }
         };
         let (kind, encoding, size) = match r.reloc {
@@ -339,23 +339,28 @@ impl<'a> ObjectBuilder<'a> {
             SectionKind::Text,
         );
 
-        // Create symbols for imports -- needed during linking.
+        // Create symbols for imports -- needed during linking, or skip for COFF.
+        let skip_imports = self.target.binary_format == BinaryFormat::Coff;
         let mut func_symbols = PrimaryMap::with_capacity(self.compilation.len());
         for index in 0..module.num_imported_funcs {
-            let symbol_id = obj.add_symbol(Symbol {
-                name: prepend_prefix(
-                    &self.prefix,
-                    utils::func_symbol_name(FuncIndex::new(index)).as_bytes(),
-                ),
-                value: 0,
-                size: 0,
-                kind: SymbolKind::Text,
-                scope: SymbolScope::Linkage,
-                weak: false,
-                section: SymbolSection::Undefined,
-                flags: SymbolFlags::None,
-            });
-            func_symbols.push(symbol_id);
+            if skip_imports {
+                func_symbols.push(None);
+            } else {
+                let symbol_id = obj.add_symbol(Symbol {
+                    name: prepend_prefix(
+                        &self.prefix,
+                        utils::func_symbol_name(FuncIndex::new(index)).as_bytes(),
+                    ),
+                    value: 0,
+                    size: 0,
+                    kind: SymbolKind::Text,
+                    scope: SymbolScope::Linkage,
+                    weak: false,
+                    section: SymbolSection::Undefined,
+                    flags: SymbolFlags::None,
+                });
+                func_symbols.push(Some(symbol_id));
+            }
         }
 
         let mut append_func = |name: Vec<u8>, func: &CompiledFunction| {
@@ -388,7 +393,7 @@ impl<'a> ObjectBuilder<'a> {
                 };
             let name = prepend_prefix(&self.prefix, maybe_debug_name.as_bytes());
             let symbol_id = append_func(name, func);
-            func_symbols.push(symbol_id);
+            func_symbols.push(Some(symbol_id));
         }
         let mut trampolines = Vec::new();
         for (i, func) in self.trampolines.iter() {
@@ -432,7 +437,7 @@ impl<'a> ObjectBuilder<'a> {
             for (index, _) in self.compilation.into_iter() {
                 let off_ = obj.append_section_data(meta_section_id, &[0; 8], 1);
                 let func_index = module.func_index(index);
-                let target_symbol = func_symbols[func_index];
+                let target_symbol = func_symbols[func_index].unwrap();
                 obj.add_relocation(
                     meta_section_id,
                     ObjectRelocation {
@@ -480,7 +485,7 @@ impl<'a> ObjectBuilder<'a> {
         for (index, func) in self.compilation.into_iter() {
             let func_index = module.func_index(index);
             let (_, off) = obj
-                .symbol_section_and_offset(func_symbols[func_index])
+                .symbol_section_and_offset(func_symbols[func_index].unwrap())
                 .unwrap();
             for r in to_object_relocations(
                 func.relocations.iter(),
@@ -514,7 +519,7 @@ impl<'a> ObjectBuilder<'a> {
             for reloc in relocs {
                 let target_symbol = match reloc.target {
                     DwarfSectionRelocTarget::Func(index) => {
-                        func_symbols[module.func_index(DefinedFuncIndex::new(index))]
+                        func_symbols[module.func_index(DefinedFuncIndex::new(index))].unwrap()
                     }
                     DwarfSectionRelocTarget::Section(name) => {
                         obj.section_symbol(*dwarf_sections_ids.get(name).unwrap())

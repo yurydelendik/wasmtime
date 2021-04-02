@@ -1,4 +1,5 @@
 foo.o
 foo.wasm
 foo.wat
+foo.lib
 libfoo.a

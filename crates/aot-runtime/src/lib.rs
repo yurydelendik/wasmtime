@@ -143,7 +143,7 @@ pub fn instantiate(
             imports,
             lookup_shared_signature: &lookup_shared_signature,
             host_state: Box::new(()),
-            interrupts: env.ints.as_ref(),
+            interrupts: env.ints_ptr(),
             externref_activations_table: &mut externref_activations_table,
             stack_map_registry: &mut stack_map_registry,
         })?;

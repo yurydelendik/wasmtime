@@ -71,22 +71,26 @@ const TOINT_32: f32 = 1.0 / f32::EPSILON;
 const TOINT_64: f64 = 1.0 / f64::EPSILON;
 
 /// Implementation of f32.ceil
+#[no_mangle]
 pub extern "C" fn wasmtime_f32_ceil(x: f32) -> f32 {
     x.ceil()
 }
 
 /// Implementation of f32.floor
+#[no_mangle]
 pub extern "C" fn wasmtime_f32_floor(x: f32) -> f32 {
     x.floor()
 }
 
 /// Implementation of f32.trunc
+#[no_mangle]
 pub extern "C" fn wasmtime_f32_trunc(x: f32) -> f32 {
     x.trunc()
 }
 
 /// Implementation of f32.nearest
 #[allow(clippy::float_arithmetic, clippy::float_cmp)]
+#[no_mangle]
 pub extern "C" fn wasmtime_f32_nearest(x: f32) -> f32 {
     // Rust doesn't have a nearest function; there's nearbyint, but it's not
     // stabilized, so do it manually.
@@ -111,57 +115,68 @@ pub extern "C" fn wasmtime_f32_nearest(x: f32) -> f32 {
 }
 
 /// Implementation of i64.udiv
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_udiv(x: u64, y: u64) -> u64 {
     x / y
 }
 
 /// Implementation of i64.sdiv
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_sdiv(x: i64, y: i64) -> i64 {
     x / y
 }
 
 /// Implementation of i64.urem
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_urem(x: u64, y: u64) -> u64 {
     x % y
 }
 
 /// Implementation of i64.srem
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_srem(x: i64, y: i64) -> i64 {
     x % y
 }
 
 /// Implementation of i64.ishl
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_ishl(x: i64, y: i64) -> i64 {
     x << y
 }
 
 /// Implementation of i64.ushr
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_ushr(x: u64, y: i64) -> u64 {
     x >> y
 }
 
 /// Implementation of i64.sshr
+#[no_mangle]
 pub extern "C" fn wasmtime_i64_sshr(x: i64, y: i64) -> i64 {
     x >> y
 }
 
 /// Implementation of f64.ceil
+#[no_mangle]
 pub extern "C" fn wasmtime_f64_ceil(x: f64) -> f64 {
     x.ceil()
 }
 
 /// Implementation of f64.floor
+#[no_mangle]
 pub extern "C" fn wasmtime_f64_floor(x: f64) -> f64 {
     x.floor()
 }
 
 /// Implementation of f64.trunc
+#[no_mangle]
 pub extern "C" fn wasmtime_f64_trunc(x: f64) -> f64 {
     x.trunc()
 }
 
 /// Implementation of f64.nearest
 #[allow(clippy::float_arithmetic, clippy::float_cmp)]
+#[no_mangle]
 pub extern "C" fn wasmtime_f64_nearest(x: f64) -> f64 {
     // Rust doesn't have a nearest function; there's nearbyint, but it's not
     // stabilized, so do it manually.
